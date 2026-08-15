@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verkabelungsplan</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-mark">◈</span>
+      <span class="brand-text">VERKABELUNGSPLAN</span>
+    </div>
+
+    <div class="toolbar">
+      <button id="modeToggle" class="btn btn-accent" title="Zwischen Bearbeitung und Nutzung wechseln">
+        <span id="modeToggleLabel">BEARBEITUNGSMODUS</span>
+      </button>
+
+      <div class="divider edit-divider"></div>
+
+      <div id="editTools" class="edit-tools">
+        <div class="palette" id="palette"></div>
+
+        <button id="btnConnectMode" class="btn" title="Verbindung zwischen zwei Elementen ziehen">
+          ⤳ Verbindung
+        </button>
+        <label class="chk" title="Farbe fuer neue Verbindungen">
+          Farbe <input type="color" id="newConnColor" value="#3ad6ff">
+        </label>
+
+        <label class="chk"><input type="checkbox" id="chkGrid" checked> Raster</label>
+        <label class="chk"><input type="checkbox" id="chkSnap" checked> Einrasten</label>
+
+        <button id="btnSave" class="btn btn-primary" title="Konfiguration speichern">
+          ⭳ Speichern
+        </button>
+      </div>
+
+      <div class="divider edit-divider"></div>
+
+      <div class="zoom-controls">
+        <button id="btnZoomOut" class="btn btn-icon">−</button>
+        <span id="zoomLabel">100%</span>
+        <button id="btnZoomIn" class="btn btn-icon">+</button>
+        <button id="btnZoomReset" class="btn btn-icon" title="Ansicht zuruecksetzen">⤢</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <button id="btnExport" class="btn" title="Verkabelungsplan als PDF oder Netzliste exportieren">
+        ⭳ Export
+      </button>
+    </div>
+  </header>
+
+  <div id="viewport">
+    <div id="canvasWrap">
+      <div id="canvas">
+        <svg id="connectionLayer"></svg>
+        <div id="elementLayer"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <span id="statusText">Bereit</span>
+    <span id="ipText"></span>
+  </div>
+</div>
+
+<!-- Modal: Element bearbeiten -->
+<div id="elementModal" class="modal-overlay hidden">
+  <div class="modal modal-wide">
+    <h2 id="elementModalTitle">Element bearbeiten</h2>
+
+    <label>Name
+      <input type="text" id="fName" placeholder="z. B. Core-Switch">
+    </label>
+
+    <label>Ort / Standort
+      <input type="text" id="fLocation" placeholder="z. B. Serverraum EG, Rack 1">
+    </label>
+
+    <label>Typ
+      <select id="fType"></select>
+    </label>
+
+    <label id="fPortsRow" class="hidden-field">Anzahl Ports (je ein Andockpunkt fuer eine Verbindung)
+      <input type="number" id="fPorts" min="1" max="48" step="1">
+    </label>
+
+    <div id="fPortNamesRow" class="hidden-field">
+      <label>Portnamen (optional, zusaetzlich zur Portnummer)</label>
+      <div id="fPortNamesList" class="port-names-list"></div>
+    </div>
+
+    <div>
+      <label>Verknuepfte Webseiten / Verbindungen (je eine eigene, benennbare
+        Schaltflaeche am Element – rdp:// laedt eine Remotedesktop-Datei
+        herunter, vnc:// / ssh:// oeffnen ueber einen installierten Client)</label>
+      <div id="fLinksList" class="links-edit-list"></div>
+      <button type="button" id="fAddLink" class="btn" style="margin-top:8px;">+ Webseite hinzufuegen</button>
+    </div>
+
+    <div class="modal-actions">
+      <button id="fDelete" class="btn btn-danger">Loeschen</button>
+      <div class="spacer"></div>
+      <button id="fCancel" class="btn">Abbrechen</button>
+      <button id="fSave" class="btn btn-primary">Uebernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Verbindung bearbeiten -->
+<div id="connModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Verbindung bearbeiten</h2>
+
+    <label>Bezeichnung
+      <input type="text" id="cLabel" placeholder="z. B. Uplink, 1 GbE, LWL">
+    </label>
+
+    <label>Farbe
+      <div class="color-row" id="colorRow"></div>
+      <div class="color-free-row">
+        <input type="color" id="cColorPicker" value="#3ad6ff">
+        <span class="color-free-label">Freie Farbwahl</span>
+      </div>
+    </label>
+
+    <label>Staerke: <span id="cThicknessVal">4</span> px
+      <input type="range" id="cThickness" min="2" max="14" value="4">
+    </label>
+
+    <p class="modal-hint">Tipp: Der Button „✎" an der Leitung öffnet ein
+      schnelles Menü, um Name, Farbe zu ändern oder die Leitung zu
+      entfernen. Hier im Dialog lassen sich zusätzlich Stärke einstellen
+      und alle Wegpunkte auf einmal zurücksetzen.</p>
+
+    <div class="modal-actions">
+      <button id="cResetRoute" class="btn" title="Alle manuell gesetzten Wegpunkte entfernen">Linie zuruecksetzen</button>
+      <button id="cDelete" class="btn btn-danger">Loeschen</button>
+      <div class="spacer"></div>
+      <button id="cCancel" class="btn">Abbrechen</button>
+      <button id="cSave" class="btn btn-primary">Uebernehmen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Export (PDF / Netzliste) -->
+<div id="exportModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h2>Verkabelungsplan exportieren</h2>
+
+    <p class="modal-hint">PDF-Export erfolgt immer im Querformat und
+      passt den gesamten Plan automatisch auf eine Seite ein. Die
+      Netzliste listet jede Verbindung mit ihren Anschlüssen als Tabelle
+      (CSV, in Excel & Co. direkt öffenbar) auf.</p>
+
+    <div class="export-option-group">
+      <label class="export-option-label">Plan als PDF (Querformat)</label>
+      <div class="export-option-row">
+        <button id="btnExportPdfDark" class="btn export-pdf-btn export-pdf-dark" title="PDF mit schwarzem Hintergrund">
+          ⬛ Dunkler Hintergrund
+        </button>
+        <button id="btnExportPdfLight" class="btn export-pdf-btn export-pdf-light" title="PDF mit weißem Hintergrund">
+          ⬜ Heller Hintergrund
+        </button>
+      </div>
+    </div>
+
+    <div class="export-option-group">
+      <label class="export-option-label">Verbindungen als Tabelle</label>
+      <div class="export-option-row">
+        <button id="btnExportNetlist" class="btn" title="Netzliste als CSV-Tabelle herunterladen">
+          ▦ Netzliste (CSV)
+        </button>
+      </div>
+    </div>
+
+    <div class="modal-actions">
+      <div class="spacer"></div>
+      <button id="exportCancel" class="btn">Schließen</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

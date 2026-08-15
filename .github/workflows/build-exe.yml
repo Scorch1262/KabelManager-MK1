@@ -1,0 +1,119 @@
+name: Build Windows EXE + macOS App
+
+# Loest den Build aus:
+# - bei jedem Push auf main
+# - bei jedem Push eines Tags, das mit "v" beginnt (z. B. v1.0.0) -> erzeugt zusaetzlich ein GitHub Release
+# - manuell ueber den "Run workflow"-Button im Actions-Tab
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ "v*" ]
+  workflow_dispatch: {}
+
+jobs:
+  # Baut die ausfuehrbare Datei parallel fuer Windows und macOS und laedt
+  # jede als eigenes Artefakt hoch (im Actions-Tab unter "Artifacts" abrufbar).
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            add_data_sep: ";"
+            output_name: Verkabelungsplan.exe
+            artifact_name: Verkabelungsplan-Windows
+
+          - os: macos-latest
+            add_data_sep: ":"
+            output_name: Verkabelungsplan
+            artifact_name: Verkabelungsplan-macOS
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python installieren
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Ausfuehrbare Datei mit PyInstaller bauen
+        run: >
+          pyinstaller --onefile --name Verkabelungsplan
+          --add-data "templates${{ matrix.add_data_sep }}templates"
+          --add-data "static${{ matrix.add_data_sep }}static"
+          app.py
+
+      - name: Ausfuehrbare Rechte setzen (macOS)
+        if: matrix.os == 'macos-latest'
+        run: chmod +x "dist/${{ matrix.output_name }}"
+
+      - name: Standard-config.json und README der Ausgabe beilegen (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          Copy-Item -Path "config.json" -Destination "dist\config.json"
+          Copy-Item -Path "README.md" -Destination "dist\README.md"
+
+      - name: Standard-config.json und README der Ausgabe beilegen (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          cp config.json dist/config.json
+          cp README.md dist/README.md
+
+      - name: Build als Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/${{ matrix.output_name }}
+            dist/config.json
+            dist/README.md
+          if-no-files-found: error
+
+  # Nur bei Tag-Push (z. B. v1.0.0): wartet auf beide Builds und erstellt EIN
+  # gemeinsames GitHub Release mit der Windows-exe, der macOS-Datei sowie
+  # config.json/README.md (jeweils nur einmal, um Namenskonflikte zu vermeiden).
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Windows-Artefakt herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: Verkabelungsplan-Windows
+          path: dl/windows
+
+      - name: macOS-Artefakt herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: Verkabelungsplan-macOS
+          path: dl/macos
+
+      - name: Release-Dateien vorbereiten (eindeutige Namen)
+        run: |
+          mkdir -p release
+          cp dl/windows/Verkabelungsplan.exe release/Verkabelungsplan-Windows.exe
+          cp dl/macos/Verkabelungsplan release/Verkabelungsplan-macOS
+          chmod +x release/Verkabelungsplan-macOS
+          cp dl/windows/config.json release/config.json
+          cp dl/windows/README.md release/README.md
+
+      - name: GitHub Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/Verkabelungsplan-Windows.exe
+            release/Verkabelungsplan-macOS
+            release/config.json
+            release/README.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,14 +1,163 @@
 {
-  "_hinweis": "Allgemeine Programmeinstellungen. Diese Datei liegt im selben Verzeichnis wie die exe.",
-  "fenster_breite": 1500,
-  "fenster_hoehe": 950,
-  "raster_groesse": 20,
-  "raster_anzeigen": true,
-  "am_raster_einrasten": true,
-  "letzter_modus": "bearbeiten",
-  "letzte_netzdatei": "netz.json",
-  "farbdatei": "colors.json",
-  "standard_zoom": 1.0,
-  "port_abstand_px": 26,
-  "element_mindestbreite": 140
+  "_kommentar": "Diese Datei wird vom Verkabelungsplan-Programm gelesen und geschrieben. Manuelle Aenderungen sind moeglich, aber bitte gueltiges JSON beibehalten.",
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080
+  },
+  "view": {
+    "zoom": 1.0,
+    "pan_x": 0,
+    "pan_y": 0,
+    "show_grid": true,
+    "snap_to_grid": true,
+    "grid_size": 40
+  },
+  "mode": "edit",
+  "elements": [
+    {
+      "id": "el-psu-1",
+      "type": "power_supply",
+      "name": "Netzteil 24V",
+      "location": "Schaltschrank 1",
+      "x": 120,
+      "y": 120,
+      "links": []
+    },
+    {
+      "id": "el-controller-1",
+      "type": "controller",
+      "name": "Steuergeraet SPS",
+      "location": "Schaltschrank 1",
+      "x": 420,
+      "y": 100,
+      "ports": 8,
+      "port_side": "bottom",
+      "port_mirror": false,
+      "links": [
+        {
+          "label": "Weboberflaeche",
+          "url": "https://192.168.1.20"
+        }
+      ]
+    },
+    {
+      "id": "el-terminal-1",
+      "type": "terminal_block",
+      "name": "Klemmleiste X1",
+      "location": "Schaltschrank 1",
+      "x": 420,
+      "y": 340,
+      "ports": 12,
+      "port_side": "bottom",
+      "port_mirror": false,
+      "port_names": ["", "24V", "GND"],
+      "links": []
+    },
+    {
+      "id": "el-relay-1",
+      "type": "relay",
+      "name": "Relay Antrieb",
+      "location": "Schaltschrank 1",
+      "x": 720,
+      "y": 340,
+      "ports": 4,
+      "port_side": "left",
+      "port_mirror": false,
+      "links": []
+    },
+    {
+      "id": "el-motor-1",
+      "type": "motor",
+      "name": "Antriebsmotor 1",
+      "location": "Maschine A",
+      "x": 980,
+      "y": 320,
+      "links": []
+    },
+    {
+      "id": "el-pi-1",
+      "type": "raspberry_pi",
+      "name": "Raspberry Pi Steuerung",
+      "location": "Schaltschrank 1",
+      "x": 720,
+      "y": 120,
+      "links": [
+        {
+          "label": "SSH",
+          "url": "ssh://192.168.1.30"
+        }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn-1",
+      "from": "el-psu-1",
+      "to": "el-controller-1",
+      "from_port": null,
+      "to_port": 0,
+      "to_port_side": "a",
+      "color": "#ffd23d",
+      "thickness": 5,
+      "label": "24V Versorgung",
+      "label_at": null,
+      "waypoints": []
+    },
+    {
+      "id": "conn-2",
+      "from": "el-controller-1",
+      "to": "el-terminal-1",
+      "from_port": 1,
+      "from_port_side": "a",
+      "to_port": 1,
+      "to_port_side": "a",
+      "color": "#3ad6ff",
+      "thickness": 4,
+      "label": "24V",
+      "label_at": null,
+      "waypoints": []
+    },
+    {
+      "id": "conn-3",
+      "from": "el-terminal-1",
+      "to": "el-relay-1",
+      "from_port": 3,
+      "from_port_side": "b",
+      "to_port": 0,
+      "to_port_side": "a",
+      "color": "#ff8a3d",
+      "thickness": 3,
+      "label": "Steuersignal",
+      "label_at": null,
+      "waypoints": []
+    },
+    {
+      "id": "conn-4",
+      "from": "el-relay-1",
+      "to": "el-motor-1",
+      "from_port": 2,
+      "from_port_side": "a",
+      "to_port": null,
+      "to_port_side": "a",
+      "color": "#35d68f",
+      "thickness": 4,
+      "label": "Motor an/aus",
+      "label_at": null,
+      "waypoints": []
+    },
+    {
+      "id": "conn-5",
+      "from": "el-controller-1",
+      "to": "el-pi-1",
+      "from_port": 5,
+      "from_port_side": "a",
+      "to_port": null,
+      "to_port_side": "a",
+      "color": "#b98bff",
+      "thickness": 3,
+      "label": "I2C",
+      "label_at": null,
+      "waypoints": []
+    }
+  ]
 }

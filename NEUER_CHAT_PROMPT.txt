@@ -1,0 +1,29 @@
+Ich möchte die Entwicklung an meinem bestehenden Projekt "Netzwerkplan"
+fortsetzen (Flask-Backend + Vanilla-JS-Frontend, interaktiver
+Netzwerkplan mit Elementen, Ports, Verbindungen, RDP-Buttons usw.).
+
+Aktueller Stand: Version 1.11.2. Das komplette Projekt liegt im Anhang,
+inklusive:
+- HANDOVER.md  -> bitte ZUERST lesen (Architektur, Datenmodell, bereits
+  behobene kritische Bugs, bewährte Test-Methodik, Standing Instructions)
+- CHANGELOG.md -> vollständige Versionshistorie mit allen Details
+- app.py, templates/, static/ -> der eigentliche Code
+- config.json  -> Beispielkonfiguration
+- .github/workflows/build-exe.yml -> CI-Build für Windows-exe + macOS
+
+Bitte halte dich an die in HANDOVER.md beschriebenen Standing
+Instructions:
+1. Bei jeder Codeänderung die neue Versionsnummer + einen Commit-Text
+   ausgeben.
+2. Abwärtskompatibilität zu allen bisherigen config.json-Formaten
+   (auch dem ursprünglichen v1.0.0-Format) ist zwingend erforderlich.
+3. Für Frontend-Änderungen/Bugfixes nach Möglichkeit mit der in
+   HANDOVER.md beschriebenen jsdom-Testmethode verifizieren (kein
+   echter Browser in dieser Umgebung verfügbar) statt sich nur auf
+   Code-Review oder reine API-Tests zu verlassen.
+
+Dies ist ein alternativer Entwicklungszweig – bitte fange mit dem
+Stand aus dem Anhang an, ohne Annahmen über einen anderen/parallelen
+Chat-Verlauf zu treffen.
+
+[Hier deine konkrete Änderungswunsch-Beschreibung einfügen]
