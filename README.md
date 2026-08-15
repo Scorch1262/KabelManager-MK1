@@ -190,15 +190,24 @@ exe gestartet wird.
   Werkzeugleiste.
 - **Element bearbeiten/löschen:** Element anklicken (Auswahl, oranger
   Rahmen), dann „Bearbeiten“ bzw. „Löschen“ in der Werkzeugleiste, oder
-  Doppelklick zum direkten Bearbeiten, oder Entf-Taste zum Löschen.
-- **Verbindung hinzufügen:** Über den Button „Verbindung hinzufügen“ in der
-  Werkzeugleiste öffnet sich ein Dialog: Start- und Zielgerät (sowie
-  optional deren Anschluss) auswählen, dann zwischen **Einzelkabel**
-  (Farbe, Stärke, Bezeichnung frei wählbar) und **Standard-Verkabelung**
-  wählen. Bei einer Standard-Verkabelung wird die Vorlage (z. B. I2C)
-  gewählt; alle enthaltenen Adern erscheinen mit ihrer Vorschlagsfarbe aus
-  der Kabelfarben-Konfiguration und können für dieses eine Kabel bei Bedarf
-  einzeln angepasst werden (Farbe, Von-/Nach-Anschlussbezeichnung).
+  Entf-Taste zum Löschen. Direkt am Element gibt es zusätzlich – wie im
+  Netzwerkplan – einen eigenen **„✎“-Button** (öffnet sofort den
+  Bearbeiten-Dialog) sowie bei Elementen mit Anschlüssen die Buttons
+  **„⟳“** (dreht die Anschlussseite: unten → links → oben → rechts) und
+  **„⇋“** (spiegelt die Reihenfolge der Anschlüsse).
+- **Verbindung anlegen (wie im Netzwerkplan):** Über den Button
+  „Verbindung“ in der Werkzeugleiste wird der Verbindungsmodus aktiviert
+  (Mauszeiger wird zum Fadenkreuz). Danach direkt im Plan zuerst den
+  **Startpunkt** anklicken – entweder einen bestimmten Anschluss (Pin) oder
+  das Element selbst, falls kein bestimmter Anschluss gemeint ist –,
+  anschliessend den **Zielpunkt** anklicken. Der gewählte Startpunkt wird
+  grün hervorgehoben. Danach öffnet sich automatisch der Dialog zur
+  Auswahl von **Einzelkabel** (Farbe, Stärke, Bezeichnung frei wählbar)
+  oder **Standard-Verkabelung** (Vorlage wie z. B. I2C wählen; alle
+  enthaltenen Adern erscheinen mit ihrer Vorschlagsfarbe aus der
+  Kabelfarben-Konfiguration und können für dieses eine Kabel bei Bedarf
+  einzeln angepasst werden). Escape bricht den Verbindungsmodus jederzeit
+  ab.
 - **Standard-Bündel auf-/zuklappen:** Im Plan wird eine Standard-
   Verkabelung als eine dicke, graue Sammelleitung mit Beschriftung (z. B.
   „I2C (4 Adern) ▸“) dargestellt. Ein Klick darauf klappt sie auf und zeigt
@@ -207,6 +216,8 @@ exe gestartet wird.
   Auf-/Zu-Zustand wird mitgespeichert.
 - **Verbindung bearbeiten/löschen:** Verbindung anklicken (Auswahl), dann
   „Bearbeiten“ bzw. „Löschen“, oder Doppelklick zum direkten Bearbeiten.
+  Jede Leitung zeigt zudem einen eigenen **„✎“-Button** direkt an der
+  Leitung (wie im Netzwerkplan) zum sofortigen Bearbeiten.
 - **Nutzungsmodus:** Über den Modus-Button oben links lässt sich zwischen
   „Bearbeiten“ (Elemente/Verbindungen anlegen, verschieben, ändern) und
   „Nutzung“ (nur Ansehen, Zoomen, Bündel auf-/zuklappen – keine

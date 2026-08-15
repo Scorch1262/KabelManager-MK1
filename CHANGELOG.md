@@ -2,6 +2,35 @@
 
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [1.1.0] – Anlegen von Verbindungen und Design an den Netzwerkplan angeglichen
+
+- **Klick-basierter Verbindungsmodus (wie im Netzwerkplan):** Statt eines
+  reinen Dropdown-Dialogs wird eine Verbindung jetzt genau wie im
+  Netzwerkplan-Vorbild angelegt: Button „Verbindung“ aktiviert den
+  Verbindungsmodus, danach werden Start- und Zielpunkt (ein bestimmter
+  Anschluss oder das Element selbst) direkt im Plan angeklickt. Der
+  gewählte Startpunkt wird gruen hervorgehoben; Escape bricht jederzeit
+  ab. Erst danach öffnet sich der Dialog zur Wahl von Einzelkabel oder
+  Standard-Verkabelung, bereits mit den angeklickten Anschlüssen
+  vorbelegt.
+- **Eigene „✎“-Bearbeiten-Buttons direkt im Plan:** Jedes Element und jede
+  Leitung zeigt jetzt im Bearbeitungsmodus einen eigenen „✎“-Button direkt
+  auf der Zeichenfläche (wie im Netzwerkplan) zum sofortigen Öffnen des
+  Bearbeiten-Dialogs, ohne den Umweg über die Werkzeugleiste.
+- **„⟳“ (Seite drehen) und „⇋“ (spiegeln) direkt am Element:** Elemente mit
+  Anschlüssen zeigen jetzt zusätzliche Buttons zum Drehen der
+  Anschlussseite (unten → links → oben → rechts) und zum Spiegeln der
+  Anschlussreihenfolge, analog zum Netzwerkplan.
+- **Weiche Leitungsführung:** Verbindungen, die an einem konkreten
+  Anschluss beginnen oder enden, verlassen das Element jetzt senkrecht zur
+  Anschlussseite und verlaufen als weiche Kurve zum Ziel (statt einer
+  geraden Linie), wie im Netzwerkplan-Vorbild.
+- **Design angeglichen:** Abgerundete Elementrahmen, dunkleres
+  Canvas-Farbschema, Hover-Cursor über Buttons/Elementen sowie ein
+  Status-Hinweistext im Verbindungsmodus, angelehnt an das Erscheinungsbild
+  des Netzwerkplan-Programms.
+- Keine Änderung am Datenformat der Konfigurationsdateien.
+
 ## [1.0.0] – Erste Version
 
 - Lokales Desktop-Programm (Tkinter) zur Planung von Verkabelungen –

@@ -130,7 +130,7 @@ class ConnectionDialog(tk.Toplevel):
     NONE_PIN = "(kein bestimmter Anschluss)"
 
     def __init__(self, parent, elements, farben_config, connection=None,
-                 preset_from=None, preset_to=None):
+                 preset_from=None, preset_to=None, preset_from_pin=None, preset_to_pin=None):
         super().__init__(parent)
         self.title("Verbindung bearbeiten" if connection else "Neue Verbindung")
         self.resizable(False, False)
@@ -237,7 +237,7 @@ class ConnectionDialog(tk.Toplevel):
         ttk.Button(btns, text="Abbrechen", command=self._cancel).pack(side="right", padx=4)
         ttk.Button(btns, text="Speichern", command=self._save).pack(side="right", padx=4)
 
-        self._prefill(connection, preset_from, preset_to)
+        self._prefill(connection, preset_from, preset_to, preset_from_pin, preset_to_pin)
         self._update_art()
 
         self.grab_set()
@@ -307,7 +307,7 @@ class ConnectionDialog(tk.Toplevel):
                 "nach_var": nach_var,
             })
 
-    def _prefill(self, connection, preset_from, preset_to):
+    def _prefill(self, connection, preset_from, preset_to, preset_from_pin=None, preset_to_pin=None):
         if connection:
             self.von_var.set(self.label_by_id.get(connection["from_element"], ""))
             self.nach_var.set(self.label_by_id.get(connection["to_element"], ""))
@@ -330,9 +330,13 @@ class ConnectionDialog(tk.Toplevel):
             if preset_from:
                 self.von_var.set(self.label_by_id.get(preset_from, ""))
                 self._refresh_pins("von")
+                if preset_from_pin and preset_from_pin in self.von_pin_cb.cget("values"):
+                    self.von_pin_var.set(preset_from_pin)
             if preset_to:
                 self.nach_var.set(self.label_by_id.get(preset_to, ""))
                 self._refresh_pins("nach")
+                if preset_to_pin and preset_to_pin in self.nach_pin_cb.cget("values"):
+                    self.nach_pin_var.set(preset_to_pin)
             if self.von_var.get() == "" and self.elements:
                 self.von_var.set(self.label_by_id[self.elements[0]["id"]])
                 self._refresh_pins("von")
