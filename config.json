@@ -1,0 +1,14 @@
+{
+  "_hinweis": "Allgemeine Programmeinstellungen. Diese Datei liegt im selben Verzeichnis wie die exe.",
+  "fenster_breite": 1500,
+  "fenster_hoehe": 950,
+  "raster_groesse": 20,
+  "raster_anzeigen": true,
+  "am_raster_einrasten": true,
+  "letzter_modus": "bearbeiten",
+  "letzte_netzdatei": "netz.json",
+  "farbdatei": "colors.json",
+  "standard_zoom": 1.0,
+  "port_abstand_px": 26,
+  "element_mindestbreite": 140
+}

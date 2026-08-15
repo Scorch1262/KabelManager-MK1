@@ -1,0 +1,107 @@
+name: Build KabelDoku (Windows + macOS)
+
+# Wird ausgeloest bei Push auf main/master, bei Tags "v*", und manuell ueber "Run workflow"
+on:
+  push:
+    branches: [ "main", "master" ]
+    tags: [ "v*" ]
+  workflow_dispatch: {}
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build-windows:
+    name: Windows exe
+    runs-on: windows-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller reportlab openpyxl
+
+      - name: EXE bauen (PyInstaller)
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name KabelDoku `
+            --add-data "config.json;." `
+            --add-data "colors.json;." `
+            kabel_doku.py
+
+      - name: Config-/Farbdateien neben die EXE legen
+        run: |
+          Copy-Item config.json dist/config.json -Force
+          Copy-Item colors.json dist/colors.json -Force
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: KabelDoku-windows
+          path: |
+            dist/KabelDoku.exe
+            dist/config.json
+            dist/colors.json
+
+  build-macos:
+    name: macOS Binary
+    runs-on: macos-latest
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Abhaengigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller reportlab openpyxl
+
+      - name: App bauen (PyInstaller)
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name KabelDoku \
+            --add-data "config.json:." \
+            --add-data "colors.json:." \
+            kabel_doku.py
+
+      - name: Config-/Farbdateien neben die Binary legen
+        run: |
+          cp config.json dist/config.json
+          cp colors.json dist/colors.json
+
+      - name: dist-Ordner als zip packen (behaelt .app-Struktur/Rechte)
+        run: |
+          cd dist
+          zip -r KabelDoku-macos.zip .
+
+      - name: Artefakt hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: KabelDoku-macos
+          path: dist/KabelDoku-macos.zip
+
+  release:
+    name: Release erstellen (nur bei Tag "v*")
+    needs: [ build-windows, build-macos ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Artefakte herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Release veroeffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/KabelDoku-windows/KabelDoku.exe
+            artifacts/KabelDoku-macos/KabelDoku-macos.zip
