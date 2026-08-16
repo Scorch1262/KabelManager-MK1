@@ -2,6 +2,40 @@
 
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [3.1.1] – Kritischer Bugfix: Verbindungen dockten bei individuell platzierten Pins am falschen Punkt an; Pins jetzt rotierbar
+
+1. **Bugfix (kritisch): Leitungen gingen bei Platine/Raspberry Pi nicht
+   vom tatsächlichen Anschlusspunkt aus.** Ursache: Jede Seite der
+   individuell platzierten Pins (`buildIndividualPinsLayer()` in
+   `static/app.js`) saß in einer eigenen `position: absolute`-Zeile. Da
+   `computePortRelOffsets()` die Andockposition über
+   `dot.offsetLeft`/`dot.offsetTop` relativ zum **nächsten positionierten
+   Vorfahren** ermittelt, wurde dabei fälschlich diese Zeile statt des
+   Elements selbst als Bezugsrahmen verwendet – der Eigen-Versatz der
+   Zeile (z. B. `top:-8px`) ging verloren und Leitungen dockten
+   verschoben an, statt exakt am Pin. Behoben, indem jeder Pin-Punkt
+   direkt (ohne Zwischen-Ebene) innerhalb der einzigen
+   `.individual-pins-layer` positioniert wird – nach exakt derselben
+   Formel wie `port_point()` im PDF-Export (`app.py`), wodurch Webansicht
+   und PDF jetzt auch hier pixelgenau übereinstimmen (numerisch
+   verifiziert, siehe Testabschnitt unten). **Betraf ausschließlich
+   Platine und Raspberry Pi** (die einzigen Typen mit individueller
+   Pin-Platzierung); alle anderen Elementtypen (gemeinsamer
+   Anschluss-Riegel) waren nicht betroffen.
+2. **Individuell platzierte Pins (Platine, Raspberry Pi) sind jetzt
+   ebenfalls rotierbar.** Neuer „⟳"-Button am Element dreht alle Pins
+   gemeinsam um eine Seite weiter (unten → links → oben → rechts,
+   dieselbe Reihenfolge wie beim bisherigen Rotieren-Button), statt jede
+   Seite einzeln im Bearbeiten-Dialog umstellen zu müssen. Ein Spiegeln-
+   Button erscheint bei diesen Typen bewusst nicht (ergibt bei frei
+   zuweisbaren Einzelseiten keinen zusätzlichen Nutzen).
+3. Getestet: DOM-Strukturprüfung (keine zusätzliche positionierte
+   Zwischen-Ebene mehr vorhanden), numerischer Abgleich der berechneten
+   Pin-Positionen gegen die unabhängig implementierte Python-Formel
+   (`port_point()`, exakte Übereinstimmung der Mittelpunkte), sowie
+   End-to-End-Verifikation per PDF-Rendering (Sensorplatine mit 4 Pins
+   auf allen 4 Seiten, Verbindung dockt sichtbar exakt am linken Pin an).
+
 ## [3.1.0] – PDF-Leitungsführung 1:1 zur Webansicht, Pin/Port-Umbenennung, viele neue Elementtypen, Kabel-Bündel, MQTT
 
 - **PDF-Export folgt jetzt exakt derselben Leitungsführung wie die

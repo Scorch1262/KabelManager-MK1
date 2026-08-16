@@ -455,26 +455,24 @@ body.use-mode .divider.edit-divider {
 .port-dot.port-kind-lan { border-color: var(--success); color: var(--success); }
 
 /* ---------------- Individuelle Pin-Platzierung (Platine/Raspberry Pi) --- */
-/* Jeder Pin wird, je nach im Element-Dialog zugewiesener Seite, absolut
-   positioniert statt in einem gemeinsamen Portriegel – siehe
-   buildIndividualPinsLayer() in app.js. */
+/* Jeder Pin wird, je nach im Element-Dialog zugewiesener Seite, direkt
+   (per Inline-style, siehe buildIndividualPinsLayer() in app.js) absolut
+   innerhalb dieser EINEN Layer-Ebene platziert. Bewusst KEINE weitere
+   position:absolute-Zwischenebene je Seite (fruehere ".individual-pins-row"):
+   das wuerde computePortRelOffsets() (offsetLeft/offsetTop relativ zum
+   naechsten positionierten Vorfahren) auf den falschen Bezugsrahmen
+   umlenken und Verbindungen wuerden nicht am tatsaechlichen Anschlusspunkt
+   andocken, sondern am Rand der Zwischen-Zeile. */
 .individual-pins-layer {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: 2;
 }
-.individual-pins-row {
+.individual-pins-layer .port-dot.individual-pin-dot {
   position: absolute;
-  display: flex;
-  gap: 4px;
-  pointer-events: none;
+  pointer-events: auto;
 }
-.individual-pins-row .port-dot { pointer-events: auto; }
-.individual-pins-row.side-top    { top: -8px; left: 10px; right: 10px; justify-content: flex-start; flex-wrap: wrap; }
-.individual-pins-row.side-bottom { bottom: -8px; left: 10px; right: 10px; justify-content: flex-start; flex-wrap: wrap; }
-.individual-pins-row.side-left   { left: -8px; top: 10px; bottom: 10px; flex-direction: column; justify-content: flex-start; }
-.individual-pins-row.side-right  { right: -8px; top: 10px; bottom: 10px; flex-direction: column; justify-content: flex-start; }
 
 /* Schwebendes Eingabefeld zum schnellen Umbenennen eines Ports (Doppelklick) */
 .port-name-input {

@@ -2,7 +2,7 @@
 
 ![Bild](Unbenannt.PNG)
 
-**Aktuelle Version: 3.1.0** – siehe [CHANGELOG.md](CHANGELOG.md) für alle
+**Aktuelle Version: 3.1.1** – siehe [CHANGELOG.md](CHANGELOG.md) für alle
 Änderungen.
 
 Ein lokal laufender Webserver, der einen interaktiven Verkabelungsplan
@@ -211,7 +211,9 @@ solange gültiges JSON erhalten bleibt.
   anderen Seite andocken. Bei **Platine** und **Raspberry Pi** lässt sich
   jeder Pin einzeln über „+ Anschluss hinzufügen" ergänzen und
   individuell einer Seite (oben/unten/links/rechts) zuweisen – beim
-  Raspberry Pi zusätzlich mit Art-Auswahl Pin/USB/LAN.
+  Raspberry Pi zusätzlich mit Art-Auswahl Pin/USB/LAN. Der „⟳"-Button am
+  Element dreht dabei alle so platzierten Pins gemeinsam um eine Seite
+  weiter, ohne jeden einzeln im Dialog umstellen zu müssen.
 - **Relay**: Kontaktart im Element-Dialog wählbar (Schließer/Öffner/
   Wechsler) – die passende Pin-Anzahl (inkl. 2 Spulen-Pins) wird
   automatisch gesetzt, das Anzeigebild zeigt das passende Schaltplan-

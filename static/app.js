@@ -712,10 +712,17 @@ function buildPortsBar(el, side, sideKey, axis, mirrored, portCount) {
 /* Individuelle Pin-Platzierung (Platine/Raspberry Pi, siehe
    hasIndividualPinPlacement): jeder Pin kann einzeln einer Seite (oben/
    unten/links/rechts) zugewiesen werden, statt eines gemeinsamen Riegels
-   fuer alle Anschluesse. Umgesetzt ueber absolut positionierte Punkte in
-   einer eigenen Layer-Ebene ueber dem Element – die eigentliche Andock-
-   Logik (computePortRelOffsets, connectionEndpoint) ist bar-unabhaengig
-   und funktioniert dadurch unveraendert weiter. */
+   fuer alle Anschluesse. Jeder Punkt wird direkt (ohne zusaetzliche
+   positionierte Zwischen-Ebene) absolut innerhalb der Layer-Ebene
+   platziert – nach genau derselben Formel wie port_point() in app.py
+   (Marge 12px, gleichmaessige Verteilung je Seite), damit PDF-Export und
+   Webansicht pixelgenau uebereinstimmen. WICHTIG: computePortRelOffsets()
+   liest dot.offsetLeft/offsetTop relativ zum naechsten positionierten
+   Vorfahren – waere ein Pin-Punkt in einer eigenen position:absolute-
+   Zeile verschachtelt, ginge deren Eigen-Versatz (top/left der Zeile) bei
+   der Berechnung verloren und Verbindungen wuerden nicht am tatsaechlichen
+   Anschlusspunkt andocken. Layer ist daher die EINZIGE positionierte
+   Ebene zwischen Element und Punkt. */
 function buildIndividualPinsLayer(el, portCount) {
   const layer = document.createElement("div");
   layer.className = "individual-pins-layer";
@@ -725,18 +732,45 @@ function buildIndividualPinsLayer(el, portCount) {
     bySide[getPinSide(el, i)].push(i);
   }
 
+  const margin = 12;
+  const half = PORT_DOT / 2;
+
   for (const side of PORT_SIDES) {
     const indices = bySide[side];
-    if (indices.length === 0) continue;
-    const axis = sideAxis(side);
-    const row = document.createElement("div");
-    row.className = "individual-pins-row side-" + side + " " + (axis === "vertical" ? "row-h" : "row-v");
-    indices.forEach((i) => {
-      row.appendChild(createPinDot(el, i, "a", side));
+    const n = indices.length;
+    if (n === 0) continue;
+    indices.forEach((pinIndex, posInSide) => {
+      const dot = createPinDot(el, pinIndex, "a", side);
+      dot.classList.add("individual-pin-dot");
+      const frac = (posInSide + 0.5) / n;
+      if (side === "bottom" || side === "top") {
+        const x = margin + frac * Math.max(DEFAULT_ELEMENT_W - 2 * margin, 1);
+        dot.style.left = (x - half) + "px";
+        dot.style.top = (side === "bottom" ? DEFAULT_ELEMENT_H - half : -half) + "px";
+      } else {
+        const y = margin + frac * Math.max(DEFAULT_ELEMENT_H - 2 * margin, 1);
+        dot.style.top = (y - half) + "px";
+        dot.style.left = (side === "right" ? DEFAULT_ELEMENT_W - half : -half) + "px";
+      }
+      layer.appendChild(dot);
     });
-    layer.appendChild(row);
   }
   return layer;
+}
+
+/* Rotiert bei individuell platzierten Pins (Platine/Raspberry Pi) ALLE
+   Pins gemeinsam um eine Seite weiter (gleiche Reihenfolge wie
+   rotatePorts: unten -> links -> oben -> rechts), statt jeden Pin einzeln
+   manuell umzustellen. */
+function rotateIndividualPins(id) {
+  const el = config.elements.find((x) => x.id === id);
+  if (!el) return;
+  const n = getPortCount(el);
+  const sides = Array.from({ length: n }, (_, i) => getPinSide(el, i));
+  el.pin_sides = sides.map((side) => PORT_SIDES[(PORT_SIDES.indexOf(side) + 1) % PORT_SIDES.length]);
+  renderElements();
+  renderConnections();
+  persistConfig();
 }
 
 function buildElementNode(el) {
@@ -856,6 +890,17 @@ function buildElementNode(el) {
         mirrorPorts(el.id);
       });
       controls.appendChild(mirrorBtn);
+    } else if (portCount > 0 && individual) {
+      const rotateBtn = document.createElement("div");
+      rotateBtn.className = "el-ctrl-btn";
+      rotateBtn.textContent = "⟳";
+      rotateBtn.title = wordPlural + " gemeinsam um eine Seite weiterdrehen (unten → links → oben → rechts)";
+      rotateBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+      rotateBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        rotateIndividualPins(el.id);
+      });
+      controls.appendChild(rotateBtn);
     }
 
     body.appendChild(controls);
