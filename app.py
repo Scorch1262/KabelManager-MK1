@@ -27,6 +27,7 @@ import sys
 import io
 import csv
 import json
+import math
 import socket
 import re
 import threading
@@ -43,6 +44,12 @@ try:
     REPORTLAB_AVAILABLE = True
 except ImportError:  # reportlab fehlt -> PDF-Export liefert verstaendliche Fehlermeldung
     REPORTLAB_AVAILABLE = False
+
+try:
+    import paho.mqtt.client as mqtt_client
+    MQTT_AVAILABLE = True
+except ImportError:  # paho-mqtt fehlt -> MQTT-Schaltflaechen liefern verstaendliche Fehlermeldung
+    MQTT_AVAILABLE = False
 
 # --------------------------------------------------------------------------
 # Pfad-Hilfsfunktionen (wichtig für PyInstaller --onefile)
@@ -90,7 +97,8 @@ DEFAULT_CONFIG = {
     },
     "mode": "edit",
     "elements": [],
-    "connections": []
+    "connections": [],
+    "cables": []
 }
 
 
@@ -160,7 +168,7 @@ ELEMENT_W = 148
 ELEMENT_H = 76
 
 # Menschenlesbare Bezeichnungen je Elementtyp fuer PDF/Netzliste. Enthaelt
-# sowohl die aktuellen (v3.0.0) als auch die frueheren (Netzwerkplan-)
+# sowohl die aktuellen (v3.1.0) als auch die frueheren (Netzwerkplan-)
 # Typen, damit auch alte config.json-Dateien sinnvoll beschriftet werden.
 ELEMENT_LABELS = {
     "power_supply": "Stromversorgung",
@@ -174,7 +182,11 @@ ELEMENT_LABELS = {
     "raspberry_pi": "Raspberry Pi",
     "camera": "Kamera",
     "router": "Router",
+    "ethernet_switch": "Ethernet Switch",
     "relay": "Relay",
+    "switch_2pos": "Schalter",
+    "button": "Taster",
+    "potentiometer": "Poti",
     "generic": "Sonstiges",
     # Legacy-Typen aus frueheren Netzwerkplan-Versionen (Abwaertskompatibilitaet):
     "gateway": "Gateway",
@@ -186,18 +198,46 @@ ELEMENT_LABELS = {
     "patchpanel": "Patchfeld",
 }
 
-# Elementtypen mit Ports + deren Standard-Portanzahl (muss zu DEFAULT_PORTS
-# in static/app.js passen).
+# Netzwerkgeraete: hier bleibt es bei "Port"/"Ports" statt "Pin"/"Pins" in
+# Netzliste/PDF (muss zu isNetworkDevice() in static/app.js passen).
+NETWORK_DEVICE_TYPES = {
+    "router", "ethernet_switch",
+    "switch", "patchpanel", "gateway", "server", "pc", "laptop", "lan_socket",
+}
+
+
+def is_network_device(el_type):
+    return el_type in NETWORK_DEVICE_TYPES
+
+
+def port_word(el_type):
+    return "Port" if is_network_device(el_type) else "Pin"
+
+# Elementtypen mit Ports/Pins + deren Standard-/Fallback-Anzahl (muss zu
+# DEFAULT_PORTS in static/app.js passen). Bei relay/motor ist dies nur der
+# Fallback fuer die jeweilige Standard-Bauart (schliesser/dc_ac) - die
+# tatsaechliche Anzahl steht im Element als "ports"-Feld. board/raspberry_pi
+# starten standardmaessig ohne Pins (0, optional individuell ergaenzbar).
 DEFAULT_PORTS_PY = {
     "controller": 8,
     "terminal_block": 12,
     "router": 4,
+    "ethernet_switch": 8,
     "relay": 4,
+    "motor": 2,
+    "power_supply": 2,
+    "battery": 2,
+    "switch_2pos": 2,
+    "button": 2,
+    "potentiometer": 3,
+    "board": 0,
+    "raspberry_pi": 0,
     # Legacy:
     "switch": 8,
     "patchpanel": 24,
 }
 DUAL_SIDE_TYPES = {"terminal_block", "patchpanel"}
+INDIVIDUAL_PIN_TYPES = {"board", "raspberry_pi"}
 OPPOSITE_SIDE = {"bottom": "top", "top": "bottom", "left": "right", "right": "left"}
 PORT_SIDES = ("bottom", "left", "top", "right")
 
@@ -231,10 +271,20 @@ def get_port_name(el, index):
     return None
 
 
+def get_pin_kind(el, index):
+    kinds = el.get("pin_kinds")
+    if isinstance(kinds, list) and 0 <= index < len(kinds) and kinds[index] in ("pin", "usb", "lan"):
+        return kinds[index]
+    return "pin"
+
+
 def port_label(el, port_index):
     if port_index is None:
         return ""
-    label = "Port " + str(int(port_index) + 1)
+    word = port_word(el.get("type"))
+    kind = get_pin_kind(el, int(port_index)) if el.get("type") == "raspberry_pi" else "pin"
+    kind_label = {"usb": "USB", "lan": "LAN"}.get(kind)
+    label = (kind_label or word) + " " + str(int(port_index) + 1)
     name = get_port_name(el, int(port_index))
     if name:
         label += " (" + name + ")"
@@ -247,27 +297,48 @@ def element_center(el):
     return x + ELEMENT_W / 2.0, y + ELEMENT_H / 2.0
 
 
+def get_pin_side_individual(el, index):
+    """Individuelle Seite eines Pins bei Platine/Raspberry Pi (siehe
+    getPinSide() in static/app.js) - jeder Pin traegt seine eigene Seite in
+    el.pin_sides statt einer gemeinsamen el.port_side."""
+    sides = el.get("pin_sides")
+    if isinstance(sides, list) and 0 <= index < len(sides) and sides[index] in PORT_SIDES:
+        return sides[index]
+    return ["bottom", "right", "top", "left"][index % 4]
+
+
 def port_point(el, port_index, side_key):
-    """Approximiert die Andockposition eines Ports fuer den Export, in
+    """Approximiert die Andockposition eines Ports/Pins fuer den Export, in
     Anlehnung an die Portleisten-Anordnung im Frontend (computePortRelOffsets
-    / buildPortsBar in static/app.js). Muss nicht pixelgenau sein, nur
-    optisch stimmig fuer PDF/Netzliste."""
+    / buildPortsBar / buildIndividualPinsLayer in static/app.js). Muss nicht
+    pixelgenau sein, nur optisch stimmig fuer PDF/Netzliste."""
     n = get_port_count(el)
     if n <= 0 or port_index is None or not (0 <= port_index < n):
         return element_center(el)
 
     x = el.get("x", 0) or 0
     y = el.get("y", 0) or 0
-    primary_side = el.get("port_side")
-    if primary_side not in PORT_SIDES:
-        primary_side = "bottom"
-    side = OPPOSITE_SIDE[primary_side] if side_key == "b" else primary_side
+    el_type = el.get("type")
 
-    idx = port_index
-    if el.get("port_mirror"):
-        idx = n - 1 - idx
+    if el_type in INDIVIDUAL_PIN_TYPES:
+        # Platine/Raspberry Pi: jeder Pin hat seine eigene Seite; innerhalb
+        # einer Seite werden die zugehoerigen Pins gleichmaessig verteilt,
+        # in der Reihenfolge ihres Pin-Index (wie buildIndividualPinsLayer).
+        side = get_pin_side_individual(el, port_index)
+        same_side_indices = [i for i in range(n) if get_pin_side_individual(el, i) == side]
+        pos_in_side = same_side_indices.index(port_index)
+        count_on_side = len(same_side_indices)
+        frac = (pos_in_side + 0.5) / count_on_side
+    else:
+        primary_side = el.get("port_side")
+        if primary_side not in PORT_SIDES:
+            primary_side = "bottom"
+        side = OPPOSITE_SIDE[primary_side] if side_key == "b" else primary_side
+        idx = port_index
+        if el.get("port_mirror"):
+            idx = n - 1 - idx
+        frac = (idx + 0.5) / n
 
-    frac = (idx + 0.5) / n
     margin = 12.0
     if side in ("bottom", "top"):
         px = x + margin + frac * max(ELEMENT_W - 2 * margin, 1)
@@ -284,10 +355,36 @@ def connection_endpoint(el, port_index, port_side):
     return element_center(el)
 
 
+def connection_direction(el, port_index, port_side):
+    """Austrittsrichtung an einem Port/Pin (siehe connectionDirection() in
+    static/app.js) - noetig, damit die PDF-Kurve exakt wie in der
+    Webansicht senkrecht von der Anschlussseite abgeht."""
+    if port_index is None or not has_ports(el.get("type")):
+        return None
+    el_type = el.get("type")
+    if el_type in INDIVIDUAL_PIN_TYPES:
+        side = get_pin_side_individual(el, port_index)
+    else:
+        primary_side = el.get("port_side")
+        if primary_side not in PORT_SIDES:
+            primary_side = "bottom"
+        side = OPPOSITE_SIDE[primary_side] if port_side == "b" else primary_side
+    return {"bottom": (0, 1), "top": (0, -1), "left": (-1, 0), "right": (1, 0)}.get(side)
+
+
 def safe_hex_color(value, fallback):
     if isinstance(value, str) and re.match(r"^#[0-9a-fA-F]{6}$", value):
         return value
     return fallback
+
+
+def get_cable(cfg, cable_id):
+    if not cable_id:
+        return None
+    for cab in cfg.get("cables", []) or []:
+        if isinstance(cab, dict) and cab.get("id") == cable_id:
+            return cab
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -308,7 +405,7 @@ def api_export_netlist():
     writer.writerow([
         "Nr", "Von", "Von-Typ", "Von-Ort", "Von-Anschluss",
         "Nach", "Nach-Typ", "Nach-Ort", "Nach-Anschluss",
-        "Farbe", "Staerke", "Bezeichnung",
+        "Farbe", "Staerke", "Bezeichnung", "Kabel",
     ])
 
     for i, conn in enumerate(cfg.get("connections", []), start=1):
@@ -320,6 +417,7 @@ def api_export_netlist():
             continue
         from_port = conn.get("from_port")
         to_port = conn.get("to_port")
+        cable = get_cable(cfg, conn.get("cable_id"))
         writer.writerow([
             i,
             f.get("name", "") or "", element_label(f.get("type")), f.get("location", "") or "",
@@ -329,6 +427,7 @@ def api_export_netlist():
             conn.get("color", "") or "",
             conn.get("thickness", "") if conn.get("thickness") is not None else "",
             conn.get("label", "") or "",
+            (cable.get("name", "") if cable else "") or "",
         ])
 
     mem = io.BytesIO(buf.getvalue().encode("utf-8"))
@@ -360,6 +459,57 @@ PDF_THEMES = {
         "port_fill": "#e8edf4",
     },
 }
+
+
+def _normalize(vx, vy):
+    length = math.hypot(vx, vy) or 1.0
+    return vx / length, vy / length
+
+
+def _seg_len(p0, p1):
+    d = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+    return max(40.0, min(160.0, d * 0.5))
+
+
+def build_smooth_path_segments(points, dir1, dir2):
+    """Python-Nachbildung von buildSmoothPath() in static/app.js - MUSS mit
+    dessen Mathematik exakt uebereinstimmen, damit die PDF-Leitungen an
+    exakt derselben Stelle verlaufen wie in der Webansicht (gleiche
+    Bezier-Kontrollpunkt-Berechnung inkl. Catmull-Rom-aehnlicher Tangenten
+    an Wegpunkten und Anti-Verknoten-Austrittsrichtung an Ports/Pins).
+    Gibt entweder [("line", p0, p1)] fuer die Sonderfall-Gerade (2 Punkte,
+    keine Portrichtung) oder eine Liste von ("curve", p0, cpA, cpB, p1)
+    Segmenten zurueck, jeweils in Canvas-Koordinaten (vor Seiten-Transform)."""
+    n = len(points)
+    if n < 2:
+        return []
+    if n == 2 and not dir1 and not dir2:
+        return [("line", points[0], points[1])]
+
+    segments = []
+    for i in range(n - 1):
+        p0, p1 = points[i], points[i + 1]
+        seg_len = _seg_len(p0, p1)
+
+        if i == 0 and dir1:
+            cp_a = (p0[0] + dir1[0] * seg_len, p0[1] + dir1[1] * seg_len)
+        else:
+            prev = points[i - 1] if i - 1 >= 0 else p0
+            nxt = points[i + 1]
+            tx, ty = _normalize(nxt[0] - prev[0], nxt[1] - prev[1])
+            cp_a = (p0[0] + tx * (seg_len / 2.2), p0[1] + ty * (seg_len / 2.2))
+
+        if i + 1 == n - 1 and dir2:
+            cp_b = (p1[0] + dir2[0] * seg_len, p1[1] + dir2[1] * seg_len)
+        else:
+            prev_of_next = points[i]
+            next_of_next = points[i + 2] if i + 2 < n else p1
+            tx, ty = _normalize(next_of_next[0] - prev_of_next[0], next_of_next[1] - prev_of_next[1])
+            cp_b = (p1[0] - tx * (seg_len / 2.2), p1[1] - ty * (seg_len / 2.2))
+
+        segments.append(("curve", p0, cp_a, cp_b, p1))
+
+    return segments
 
 
 def build_pdf(cfg, theme_name):
@@ -433,19 +583,74 @@ def build_pdf(cfg, theme_name):
                 off_y + (bbox_y1 - py) * scale)
 
     # --- Verbindungen zeichnen (unter den Elementen) ---
+    # Jede Leitung folgt exakt derselben Bezier-Kurven-Berechnung wie die
+    # Webansicht (siehe build_smooth_path_segments/buildSmoothPath), statt
+    # nur die gleichen Punkte gerade zu verbinden.
     c.setLineJoin(1)
     c.setLineCap(1)
+
+    # Kabel-Buendel: Verbindungen mit gleicher cable_id bekommen zusaetzlich
+    # eine gemeinsame "Kabelmantel"-Linie in der Kabelfarbe UNTER den
+    # einzelnen Adern, gezeichnet entlang der Route der ersten Verbindung
+    # im Buendel (siehe renderConnections()/cable-sleeve in static/app.js).
+    cables_by_id = {}
     for conn in connections:
+        cable_id = conn.get("cable_id")
+        if not cable_id:
+            continue
+        cables_by_id.setdefault(cable_id, []).append(conn)
+
+    def conn_canvas_path(conn):
         f = el_by_id.get(conn.get("from"))
         t = el_by_id.get(conn.get("to"))
         if not f or not t:
-            continue
+            return None
         p1 = connection_endpoint(f, conn.get("from_port"), conn.get("from_port_side"))
         p2 = connection_endpoint(t, conn.get("to_port"), conn.get("to_port_side"))
-        waypoints = [wp for wp in (conn.get("waypoints") or [])
+        dir1 = connection_direction(f, conn.get("from_port"), conn.get("from_port_side"))
+        dir2 = connection_direction(t, conn.get("to_port"), conn.get("to_port_side"))
+        waypoints = [(wp["x"], wp["y"]) for wp in (conn.get("waypoints") or [])
                      if isinstance(wp, dict) and "x" in wp and "y" in wp]
-        points = [p1] + [(wp["x"], wp["y"]) for wp in waypoints] + [p2]
-        page_points = [to_page(px, py) for px, py in points]
+        points = [p1] + waypoints + [p2]
+        return build_smooth_path_segments(points, dir1, dir2)
+
+    def draw_canvas_path(segments, color_hex, width_pt):
+        if not segments:
+            return
+        first_point = segments[0][1]
+        path = c.beginPath()
+        path.moveTo(*to_page(*first_point))
+        for seg in segments:
+            if seg[0] == "line":
+                _, _p0, p1 = seg
+                path.lineTo(*to_page(*p1))
+            else:
+                _, _p0, cp_a, cp_b, p1 = seg
+                path.curveTo(*to_page(*cp_a), *to_page(*cp_b), *to_page(*p1))
+        c.setStrokeColor(HexColor(color_hex))
+        c.setLineWidth(width_pt)
+        c.drawPath(path, stroke=1, fill=0)
+
+    drawn_sleeve_cables = set()
+    for conn in connections:
+        segments = conn_canvas_path(conn)
+        if not segments:
+            continue
+
+        cable_id = conn.get("cable_id")
+        if cable_id and cable_id not in drawn_sleeve_cables:
+            drawn_sleeve_cables.add(cable_id)
+            cable = get_cable(cfg, cable_id)
+            sleeve_color = safe_hex_color(cable.get("color") if cable else None, "#5c6b7f")
+            # Dickste Ader im Buendel bestimmt die Mantelstaerke.
+            max_thickness = 4.0
+            for member in cables_by_id.get(cable_id, []):
+                try:
+                    max_thickness = max(max_thickness, float(member.get("thickness") or 4))
+                except (TypeError, ValueError):
+                    pass
+            sleeve_width = max(1.0, min(max_thickness, 14)) * scale * 0.85 + 4.5 * scale
+            draw_canvas_path(segments, sleeve_color, max(sleeve_width, 2.0))
 
         color = safe_hex_color(conn.get("color"), "#3ad6ff")
         thickness = conn.get("thickness")
@@ -455,24 +660,43 @@ def build_pdf(cfg, theme_name):
             thickness = 4.0
         thickness = max(0.75, min(thickness, 14)) * scale * 0.85
         thickness = max(thickness, 0.6)
-
-        c.setStrokeColor(HexColor(color))
-        c.setLineWidth(thickness)
-        path = c.beginPath()
-        path.moveTo(*page_points[0])
-        for pt in page_points[1:]:
-            path.lineTo(*pt)
-        c.drawPath(path, stroke=1, fill=0)
+        draw_canvas_path(segments, color, thickness)
 
         label = (conn.get("label") or "").strip()
         if label:
-            mid_i = len(page_points) // 2
-            mx, my = page_points[max(0, mid_i - 1)]
-            mx2, my2 = page_points[min(len(page_points) - 1, mid_i)]
-            lx, ly = (mx + mx2) / 2, (my + my2) / 2 + 6
+            canvas_points = [seg[1] for seg in segments] + [segments[-1][-1]]
+            label_at = conn.get("label_at")
+            if isinstance(label_at, dict) and "x" in label_at and "y" in label_at:
+                label_point = (label_at["x"], label_at["y"])
+            else:
+                mid_i = (len(canvas_points) - 1) // 2
+                a = canvas_points[mid_i]
+                b = canvas_points[min(mid_i + 1, len(canvas_points) - 1)]
+                # -8 in Canvas-Y (waechst nach unten) = optisch "nach oben".
+                label_point = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 8)
+            lx, ly = to_page(*label_point)
             c.setFont("Helvetica", 7.5)
             c.setFillColor(HexColor(theme["text_dim"]))
             c.drawCentredString(lx, ly, label)
+
+    # Kabel-Buendel-Namen mittig auf dem Kabelmantel anzeigen.
+    for cable_id, members in cables_by_id.items():
+        cable = get_cable(cfg, cable_id)
+        cable_name = (cable.get("name") if cable else "") or ""
+        if not cable_name:
+            continue
+        segments = conn_canvas_path(members[0])
+        if not segments:
+            continue
+        canvas_points = [seg[1] for seg in segments] + [segments[-1][-1]]
+        mid_i = (len(canvas_points) - 1) // 2
+        a = canvas_points[mid_i]
+        b = canvas_points[min(mid_i + 1, len(canvas_points) - 1)]
+        mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 8)
+        lx, ly = to_page(*mid)
+        c.setFont("Helvetica-Bold", 7.5)
+        c.setFillColor(HexColor(theme["text"]))
+        c.drawCentredString(lx, ly - 9, "Kabel: " + cable_name)
 
     # --- Elemente zeichnen ---
     for el in elements:
@@ -508,21 +732,32 @@ def build_pdf(cfg, theme_name):
         c.drawString(text_x, max(ry + 3, text_y - (font_size - 1)), truncate_to_width(
             c, sub, "Helvetica", max(5.5, font_size - 2), rw - 8 * scale))
 
-        # Ports als kleine, nummerierte Punkte am Rand des Elements.
+        # Ports/Pins als kleine, nummerierte Punkte am Rand des Elements.
         port_count = get_port_count(el)
         if port_count > 0:
-            sides = {"a"}
-            if el.get("type") in DUAL_SIDE_TYPES:
-                sides.add("b")
-            for side_key in sides:
+            if el.get("type") in INDIVIDUAL_PIN_TYPES:
+                # Platine/Raspberry Pi: jeder Pin einzeln (eigene Seite je Index).
                 for i in range(port_count):
-                    ppx, ppy = port_point(el, i, side_key)
+                    ppx, ppy = port_point(el, i, "a")
                     dx, dy = to_page(ppx, ppy)
                     r = max(1.6, 2.4 * scale)
                     c.setFillColor(HexColor(theme["port_fill"]))
                     c.setStrokeColor(HexColor(theme["el_border"]))
                     c.setLineWidth(0.5)
                     c.circle(dx, dy, r, stroke=1, fill=1)
+            else:
+                sides = {"a"}
+                if el.get("type") in DUAL_SIDE_TYPES:
+                    sides.add("b")
+                for side_key in sides:
+                    for i in range(port_count):
+                        ppx, ppy = port_point(el, i, side_key)
+                        dx, dy = to_page(ppx, ppy)
+                        r = max(1.6, 2.4 * scale)
+                        c.setFillColor(HexColor(theme["port_fill"]))
+                        c.setStrokeColor(HexColor(theme["el_border"]))
+                        c.setLineWidth(0.5)
+                        c.circle(dx, dy, r, stroke=1, fill=1)
 
     c.showPage()
     c.save()
@@ -566,6 +801,65 @@ def api_export_pdf():
 
 
 # --------------------------------------------------------------------------
+# MQTT: Nachricht ueber eine Element-Schaltflaeche versenden
+# --------------------------------------------------------------------------
+# Ein Link mit Schema "mqtt://" an einem Element sendet beim Klick (statt
+# eine Webseite zu oeffnen) eine MQTT-Nachricht. Der Versand laeuft ueber
+# den Server (nicht den Browser), da Browser aus Sicherheitsgruenden keine
+# rohen TCP-Verbindungen zu einem MQTT-Broker aufbauen koennen.
+
+@app.route("/api/mqtt/publish", methods=["POST"])
+def api_mqtt_publish():
+    if not MQTT_AVAILABLE:
+        return jsonify({
+            "status": "error",
+            "message": "MQTT-Versand nicht verfuegbar: Das Python-Paket "
+                       "'paho-mqtt' ist auf diesem Server nicht installiert."
+        }), 500
+
+    payload = request.get_json(force=True, silent=True) or {}
+    host = (payload.get("host") or "").strip()
+    topic = (payload.get("topic") or "").strip()
+    message = payload.get("payload")
+    message = "" if message is None else str(message)
+    try:
+        port = int(payload.get("port") or 1883)
+    except (TypeError, ValueError):
+        port = 1883
+    username = (payload.get("username") or "").strip() or None
+    password = payload.get("password") or None
+    qos = payload.get("qos")
+    try:
+        qos = int(qos) if qos is not None else 0
+        qos = qos if qos in (0, 1, 2) else 0
+    except (TypeError, ValueError):
+        qos = 0
+
+    if not host or not topic:
+        return jsonify({"status": "error", "message": "Broker-Host und Topic sind erforderlich."}), 400
+
+    try:
+        client = mqtt_client.Client()
+        if username:
+            client.username_pw_set(username, password)
+        client.connect(host, port, keepalive=5)
+        client.loop_start()
+        info = client.publish(topic, payload=message, qos=qos)
+        info.wait_for_publish(timeout=5)
+        client.loop_stop()
+        client.disconnect()
+        if not info.is_published():
+            raise RuntimeError("Nachricht konnte nicht zugestellt werden (kein PUBACK erhalten).")
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({
+            "status": "error",
+            "message": f"Verbindung zu {host}:{port} fehlgeschlagen: {exc}"
+        }), 502
+
+    return jsonify({"status": "ok", "topic": topic})
+
+
+# --------------------------------------------------------------------------
 # Netzwerk-Helfer
 # --------------------------------------------------------------------------
 
@@ -603,6 +897,8 @@ def main():
     print(f" Konfiguration:  {CONFIG_PATH}")
     if not REPORTLAB_AVAILABLE:
         print(" [HINWEIS] Paket 'reportlab' fehlt -> PDF-Export ist deaktiviert.")
+    if not MQTT_AVAILABLE:
+        print(" [HINWEIS] Paket 'paho-mqtt' fehlt -> MQTT-Schaltflaechen sind deaktiviert.")
     print(" Zum Beenden dieses Fenster schliessen oder STRG+C druecken.")
     print("=" * 64)
 

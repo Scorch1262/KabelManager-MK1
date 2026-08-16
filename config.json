@@ -19,8 +19,10 @@
       "type": "power_supply",
       "name": "Netzteil 24V",
       "location": "Schaltschrank 1",
-      "x": 120,
-      "y": 120,
+      "x": 80,
+      "y": 100,
+      "ports": 2,
+      "port_names": ["+", "-"],
       "links": []
     },
     {
@@ -28,8 +30,8 @@
       "type": "controller",
       "name": "Steuergeraet SPS",
       "location": "Schaltschrank 1",
-      "x": 420,
-      "y": 100,
+      "x": 400,
+      "y": 80,
       "ports": 8,
       "port_side": "bottom",
       "port_mirror": false,
@@ -37,41 +39,53 @@
         {
           "label": "Weboberflaeche",
           "url": "https://192.168.1.20"
+        },
+        {
+          "label": "Relais 1 einschalten",
+          "url": "mqtt://192.168.1.5:1883",
+          "topic": "schaltschrank1/relais1/set",
+          "payload": "ON"
         }
       ]
     },
     {
-      "id": "el-terminal-1",
-      "type": "terminal_block",
-      "name": "Klemmleiste X1",
-      "location": "Schaltschrank 1",
-      "x": 420,
-      "y": 340,
-      "ports": 12,
-      "port_side": "bottom",
-      "port_mirror": false,
-      "port_names": ["", "24V", "GND"],
-      "links": []
-    },
-    {
       "id": "el-relay-1",
       "type": "relay",
-      "name": "Relay Antrieb",
+      "name": "Relais Antrieb",
       "location": "Schaltschrank 1",
-      "x": 720,
-      "y": 340,
-      "ports": 4,
-      "port_side": "left",
+      "x": 400,
+      "y": 300,
+      "relay_type": "wechsler",
+      "ports": 5,
+      "port_side": "bottom",
       "port_mirror": false,
+      "port_names": ["Spule A1", "Spule A2", "gemeinsam (11)", "Öffner (12)", "Schließer (14)"],
       "links": []
     },
     {
       "id": "el-motor-1",
       "type": "motor",
-      "name": "Antriebsmotor 1",
+      "name": "Schrittmotor Antrieb",
       "location": "Maschine A",
-      "x": 980,
-      "y": 320,
+      "x": 750,
+      "y": 300,
+      "motor_type": "stepper",
+      "ports": 4,
+      "port_side": "left",
+      "port_mirror": false,
+      "port_names": ["A+", "A-", "B+", "B-"],
+      "links": []
+    },
+    {
+      "id": "el-board-1",
+      "type": "board",
+      "name": "Sensorplatine",
+      "location": "Schaltschrank 1",
+      "x": 80,
+      "y": 340,
+      "ports": 4,
+      "port_names": ["VCC", "GND", "SDA", "SCL"],
+      "pin_sides": ["top", "bottom", "left", "right"],
       "links": []
     },
     {
@@ -79,8 +93,12 @@
       "type": "raspberry_pi",
       "name": "Raspberry Pi Steuerung",
       "location": "Schaltschrank 1",
-      "x": 720,
-      "y": 120,
+      "x": 400,
+      "y": 480,
+      "ports": 3,
+      "port_names": ["GPIO17 (I2C SDA)", "", ""],
+      "pin_sides": ["bottom", "right", "right"],
+      "pin_kinds": ["pin", "usb", "lan"],
       "links": [
         {
           "label": "SSH",
@@ -94,70 +112,83 @@
       "id": "conn-1",
       "from": "el-psu-1",
       "to": "el-controller-1",
-      "from_port": null,
+      "from_port": 0,
+      "from_port_side": "a",
       "to_port": 0,
       "to_port_side": "a",
       "color": "#ffd23d",
       "thickness": 5,
       "label": "24V Versorgung",
       "label_at": null,
-      "waypoints": []
+      "waypoints": [],
+      "cable_id": null
     },
     {
       "id": "conn-2",
       "from": "el-controller-1",
-      "to": "el-terminal-1",
-      "from_port": 1,
-      "from_port_side": "a",
-      "to_port": 1,
-      "to_port_side": "a",
-      "color": "#3ad6ff",
-      "thickness": 4,
-      "label": "24V",
-      "label_at": null,
-      "waypoints": []
-    },
-    {
-      "id": "conn-3",
-      "from": "el-terminal-1",
       "to": "el-relay-1",
-      "from_port": 3,
-      "from_port_side": "b",
+      "from_port": 2,
+      "from_port_side": "a",
       "to_port": 0,
       "to_port_side": "a",
-      "color": "#ff8a3d",
+      "color": "#3ad6ff",
       "thickness": 3,
       "label": "Steuersignal",
       "label_at": null,
-      "waypoints": []
+      "waypoints": [],
+      "cable_id": null
+    },
+    {
+      "id": "conn-3",
+      "from": "el-relay-1",
+      "to": "el-motor-1",
+      "from_port": 4,
+      "from_port_side": "a",
+      "to_port": 0,
+      "to_port_side": "a",
+      "color": "#ff8a3d",
+      "thickness": 4,
+      "label": "Phase A",
+      "label_at": null,
+      "waypoints": [],
+      "cable_id": "cable-motor-1"
     },
     {
       "id": "conn-4",
       "from": "el-relay-1",
       "to": "el-motor-1",
-      "from_port": 2,
+      "from_port": 3,
       "from_port_side": "a",
-      "to_port": null,
+      "to_port": 1,
       "to_port_side": "a",
       "color": "#35d68f",
       "thickness": 4,
-      "label": "Motor an/aus",
+      "label": "Phase B",
       "label_at": null,
-      "waypoints": []
+      "waypoints": [],
+      "cable_id": "cable-motor-1"
     },
     {
       "id": "conn-5",
-      "from": "el-controller-1",
-      "to": "el-pi-1",
-      "from_port": 5,
+      "from": "el-pi-1",
+      "to": "el-board-1",
+      "from_port": 0,
       "from_port_side": "a",
-      "to_port": null,
+      "to_port": 2,
       "to_port_side": "a",
       "color": "#b98bff",
-      "thickness": 3,
+      "thickness": 2,
       "label": "I2C",
       "label_at": null,
-      "waypoints": []
+      "waypoints": [],
+      "cable_id": null
+    }
+  ],
+  "cables": [
+    {
+      "id": "cable-motor-1",
+      "name": "Motorkabel 1",
+      "color": "#5c6b7f"
     }
   ]
 }

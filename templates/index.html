@@ -78,32 +78,51 @@
     <h2 id="elementModalTitle">Element bearbeiten</h2>
 
     <label>Name
-      <input type="text" id="fName" placeholder="z. B. Core-Switch">
+      <input type="text" id="fName" placeholder="z. B. Steuergerät SPS">
     </label>
 
     <label>Ort / Standort
-      <input type="text" id="fLocation" placeholder="z. B. Serverraum EG, Rack 1">
+      <input type="text" id="fLocation" placeholder="z. B. Schaltschrank 1" list="fLocationSuggestions" autocomplete="off">
+      <datalist id="fLocationSuggestions"></datalist>
     </label>
 
     <label>Typ
       <select id="fType"></select>
     </label>
 
-    <label id="fPortsRow" class="hidden-field">Anzahl Ports (je ein Andockpunkt fuer eine Verbindung)
+    <label id="fRelayTypeRow" class="hidden-field">Kontaktart
+      <select id="fRelayType">
+        <option value="schliesser">Schließer (Öffner-/Schließerkontakt: normalerweise offen)</option>
+        <option value="oeffner">Öffner (normalerweise geschlossen)</option>
+        <option value="wechsler">Wechsler (Umschaltkontakt)</option>
+      </select>
+    </label>
+
+    <label id="fMotorTypeRow" class="hidden-field">Motorart
+      <select id="fMotorType">
+        <option value="dc_ac">Gleich-/Wechselstrommotor (2 Anschlüsse)</option>
+        <option value="bldc">Bürstenloser Motor / BLDC (3 Anschlüsse)</option>
+        <option value="stepper">Schrittmotor (4 Anschlüsse)</option>
+      </select>
+    </label>
+
+    <label id="fPortsRow" class="hidden-field"><span id="fPortsLabel">Anzahl Pins</span> (je ein Andockpunkt fuer eine Verbindung)
       <input type="number" id="fPorts" min="1" max="48" step="1">
     </label>
 
     <div id="fPortNamesRow" class="hidden-field">
-      <label>Portnamen (optional, zusaetzlich zur Portnummer)</label>
+      <label id="fPortNamesLabel">Pinnamen (optional, zusaetzlich zur Pinnummer)</label>
       <div id="fPortNamesList" class="port-names-list"></div>
+      <button type="button" id="fAddPin" class="btn hidden-field" style="margin-top:6px;">+ Anschluss hinzufuegen</button>
     </div>
 
     <div>
-      <label>Verknuepfte Webseiten / Verbindungen (je eine eigene, benennbare
+      <label>Verknuepfte Webseiten / Aktionen (je eine eigene, benennbare
         Schaltflaeche am Element – rdp:// laedt eine Remotedesktop-Datei
-        herunter, vnc:// / ssh:// oeffnen ueber einen installierten Client)</label>
+        herunter, vnc:// / ssh:// oeffnen ueber einen installierten Client,
+        mqtt:// sendet beim Klick eine MQTT-Nachricht)</label>
       <div id="fLinksList" class="links-edit-list"></div>
-      <button type="button" id="fAddLink" class="btn" style="margin-top:8px;">+ Webseite hinzufuegen</button>
+      <button type="button" id="fAddLink" class="btn" style="margin-top:8px;">+ Webseite/Aktion hinzufuegen</button>
     </div>
 
     <div class="modal-actions">
@@ -136,10 +155,17 @@
       <input type="range" id="cThickness" min="2" max="14" value="4">
     </label>
 
+    <label>Kabel-Buendel
+      <select id="cCable"></select>
+    </label>
+
     <p class="modal-hint">Tipp: Der Button „✎" an der Leitung öffnet ein
       schnelles Menü, um Name, Farbe zu ändern oder die Leitung zu
-      entfernen. Hier im Dialog lassen sich zusätzlich Stärke einstellen
-      und alle Wegpunkte auf einmal zurücksetzen.</p>
+      entfernen. Hier im Dialog lassen sich zusätzlich Stärke, Kabel-
+      Zugehörigkeit einstellen und alle Wegpunkte auf einmal zurücksetzen.
+      Verbindungen im selben Kabel-Bündel werden als gemeinsamer Kabelstrang
+      dargestellt (Export und Ansicht) und lassen sich am Wegpunkt-Handle
+      gemeinsam verlegen.</p>
 
     <div class="modal-actions">
       <button id="cResetRoute" class="btn" title="Alle manuell gesetzten Wegpunkte entfernen">Linie zuruecksetzen</button>

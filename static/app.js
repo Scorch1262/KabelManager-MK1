@@ -2,29 +2,78 @@
    Verkabelungsplan – Frontend-Logik
    ========================================================================= */
 
-/* Elementtypen (Stand v3.0.0 – Umstellung von "Netzwerkplan" auf
-   "Verkabelungsplan"). Die vorherigen Netzwerk-Typen (switch, gateway,
-   server, pc, laptop, lan_socket, patchpanel) sind hier absichtlich NICHT
-   mehr enthalten, damit sie nicht mehr aus der Palette wählbar sind –
-   bestehende Elemente dieser Typen aus älteren config.json-Dateien laden
-   aber weiterhin fehlerfrei (Fallback auf "Sonstiges"-Darstellung über
-   `ELEMENT_TYPES[el.type] || ELEMENT_TYPES.generic`) und bleiben mit ihrem
-   ursprünglichen `type`-Wert unverändert gespeichert. */
+/* Elementtypen (Stand v3.1.0). Die vorherigen Netzwerk-Typen aus der
+   Netzwerkplan-Aera (switch, gateway, server, pc, laptop, lan_socket,
+   patchpanel) sind hier absichtlich NICHT mehr enthalten, damit sie nicht
+   mehr aus der Palette wählbar sind – bestehende Elemente dieser Typen aus
+   älteren config.json-Dateien laden aber weiterhin fehlerfrei (Fallback auf
+   "Sonstiges"-Darstellung über `ELEMENT_TYPES[el.type] || ELEMENT_TYPES.generic`)
+   und bleiben mit ihrem ursprünglichen `type`-Wert unverändert gespeichert.
+   "ethernet_switch" ist die einzige Ausnahme: ein waschechtes Netzwerkgerät,
+   das auf Wunsch wieder in die Palette aufgenommen wurde. */
 const ELEMENT_TYPES = {
-  power_supply:  { label: "Stromversorgung", icon: "⚡", color: "#ffd23d" },
-  battery:       { label: "Batterie",        icon: "🔋", color: "#35d68f" },
-  motor:         { label: "Motor",           icon: "⚙",  color: "#ff8a3d" },
-  actuator:      { label: "Antrieb",         icon: "↻",  color: "#ffb347" },
-  board:         { label: "Platine",         icon: "▤",  color: "#3ad6ff" },
-  controller:    { label: "Steuergerät",     icon: "▦",  color: "#3ad6ff" },
-  terminal_block:{ label: "Klemmleiste",     icon: "▥",  color: "#9aa7b8" },
-  delay:         { label: "Delay",           icon: "⏱",  color: "#b98bff" },
-  raspberry_pi:  { label: "Raspberry Pi",    icon: "◍",  color: "#ff4d5e" },
-  camera:        { label: "Kamera",          icon: "◉",  color: "#ffd23d" },
-  router:        { label: "Router",          icon: "⇋",  color: "#ff8a3d" },
-  relay:         { label: "Relay",           icon: "⟲",  color: "#35d68f" },
-  generic:       { label: "Sonstiges",       icon: "▪",  color: "#9aa7b8" },
+  power_supply:   { label: "Stromversorgung", icon: "⚡", color: "#ffd23d" },
+  battery:        { label: "Batterie",        icon: "🔋", color: "#35d68f" },
+  motor:          { label: "Motor",           icon: "⚙",  color: "#ff8a3d" },
+  actuator:       { label: "Antrieb",         icon: "↻",  color: "#ffb347" },
+  board:          { label: "Platine",         icon: "▤",  color: "#3ad6ff" },
+  controller:     { label: "Steuergerät",     icon: "▦",  color: "#3ad6ff" },
+  terminal_block: { label: "Klemmleiste",     icon: "▥",  color: "#9aa7b8" },
+  delay:          { label: "Delay",           icon: "⏱",  color: "#b98bff" },
+  raspberry_pi:   { label: "Raspberry Pi",    icon: "◍",  color: "#ff4d5e" },
+  camera:         { label: "Kamera",          icon: "◉",  color: "#ffd23d" },
+  router:         { label: "Router",          icon: "⇋",  color: "#ff8a3d" },
+  ethernet_switch:{ label: "Ethernet Switch", icon: "⇄",  color: "#3ad6ff" },
+  relay:          { label: "Relay",           icon: "⟲",  color: "#35d68f" },
+  switch_2pos:    { label: "Schalter",        icon: "⏻",  color: "#e8edf4" },
+  button:         { label: "Taster",          icon: "●",  color: "#e8edf4" },
+  potentiometer:  { label: "Poti",            icon: "◑",  color: "#e8edf4" },
+  generic:        { label: "Sonstiges",       icon: "▪",  color: "#9aa7b8" },
 };
+
+/* Netzwerkgeraete: bei diesen Typen bleibt es bei "Port"/"Ports" (statt
+   "Pin"/"Pins") in der Oberflaeche, Netzliste etc. – siehe portWord(). */
+function isNetworkDevice(type) {
+  return type === "router" || type === "ethernet_switch"
+    // Legacy-Netzwerktypen aus der Netzwerkplan-Aera (Abwaertskompatibilitaet):
+    || type === "switch" || type === "patchpanel" || type === "gateway"
+    || type === "server" || type === "pc" || type === "laptop" || type === "lan_socket";
+}
+function portWord(type) { return isNetworkDevice(type) ? "Port" : "Pin"; }
+function portWordPlural(type) { return isNetworkDevice(type) ? "Ports" : "Pins"; }
+
+/* Relay: Kontaktart bestimmt die Anzahl der Kontakt-Pins (+2 feste Pins fuer
+   die Spule). DIN-Klemmenbezeichnungen (11/12/14) als Standard-Pinnamen. */
+const RELAY_TYPES = {
+  schliesser: {
+    label: "Schließer",
+    pinCount: 4,
+    names: ["Spule A1", "Spule A2", "gemeinsam (11)", "Schließer (14)"],
+  },
+  oeffner: {
+    label: "Öffner",
+    pinCount: 4,
+    names: ["Spule A1", "Spule A2", "gemeinsam (11)", "Öffner (12)"],
+  },
+  wechsler: {
+    label: "Wechsler",
+    pinCount: 5,
+    names: ["Spule A1", "Spule A2", "gemeinsam (11)", "Öffner (12)", "Schließer (14)"],
+  },
+};
+function getRelayType(el) {
+  return RELAY_TYPES[el.relay_type] ? el.relay_type : "schliesser";
+}
+
+/* Motor: Bauart bestimmt die Anzahl der Anschluss-Pins. */
+const MOTOR_TYPES = {
+  dc_ac:   { label: "Gleich-/Wechselstrommotor", pinCount: 2, names: ["+", "-"] },
+  bldc:    { label: "Bürstenloser Motor (BLDC)", pinCount: 3, names: ["U", "V", "W"] },
+  stepper: { label: "Schrittmotor",              pinCount: 4, names: ["A+", "A-", "B+", "B-"] },
+};
+function getMotorType(el) {
+  return MOTOR_TYPES[el.motor_type] ? el.motor_type : "dc_ac";
+}
 
 const CONNECTION_COLORS = [
   "#3ad6ff", "#ff8a3d", "#35d68f", "#ff4d5e",
@@ -34,21 +83,41 @@ const CONNECTION_COLORS = [
 const DEFAULT_ELEMENT_W = 148;
 const DEFAULT_ELEMENT_H = 76;
 
-/* Elementtypen mit eigenen Anschluss-Ports (je Port ein Andockpunkt fuer
-   Verbindungsleitungen). Wert = Standard-Portanzahl bei neuen Elementen.
-   "switch" und "patchpanel" sind hier aus Abwaertskompatibilitaetsgruenden
-   erhalten (siehe Kommentar bei ELEMENT_TYPES): so behalten Elemente
-   dieser Typen aus aelteren config.json-Dateien ihre Ports/Andockpunkte,
-   auch wenn die Typen selbst nicht mehr in der Palette auswaehlbar sind. */
+/* Elementtypen mit eigenen Anschluss-Pins/-Ports (je ein Andockpunkt fuer
+   Verbindungsleitungen). Wert = Standard-Anzahl bei neuen Elementen (bei
+   Relay/Motor nur der Fallback fuer die jeweilige Standard-Bauart, siehe
+   RELAY_TYPES/MOTOR_TYPES – die tatsaechliche Anzahl wird beim Aendern der
+   Bauart automatisch neu gesetzt). "switch" und "patchpanel" sind aus
+   Abwaertskompatibilitaetsgruenden erhalten (siehe Kommentar bei
+   ELEMENT_TYPES): so behalten Elemente dieser Typen aus aelteren
+   config.json-Dateien ihre Ports/Andockpunkte. board/raspberry_pi starten
+   standardmaessig ohne Pins (0) – Pins werden dort optional und individuell
+   pro Seite platzierbar hinzugefuegt (siehe hasIndividualPinPlacement). */
 const DEFAULT_PORTS = {
   controller: 8,
   terminal_block: 12,
   router: 4,
-  relay: 4,
+  ethernet_switch: 8,
+  relay: RELAY_TYPES.schliesser.pinCount,
+  motor: MOTOR_TYPES.dc_ac.pinCount,
+  power_supply: 2,
+  battery: 2,
+  switch_2pos: 2,
+  button: 2,
+  potentiometer: 3,
+  board: 0,
+  raspberry_pi: 0,
   // Legacy (Netzwerkplan v1.x):
   switch: 8,
   patchpanel: 24,
 };
+/* Mindestanzahl je Typ (Spannungsversorgung/Batterie brauchen mindestens
+   Plus- und Minuspol). */
+const MIN_PORTS_BY_TYPE = { power_supply: 2, battery: 2 };
+function getMinPorts(type) {
+  return MIN_PORTS_BY_TYPE[type] || PORT_MIN;
+}
+
 const PORT_MIN = 1, PORT_MAX = 48;
 const PORT_DOT = 14, PORT_GAP = 5;
 
@@ -61,6 +130,13 @@ const OPPOSITE_SIDE = { bottom: "top", top: "bottom", left: "right", right: "lef
    einer Klemmleiste: Port 1 vorne = Port 1 hinten, gleicher Name). */
 function hasDualSides(type) {
   return type === "terminal_block" || type === "patchpanel";
+}
+/* Elementtypen, bei denen jeder Pin einzeln einer Seite zugeordnet werden
+   kann (statt eines gemeinsamen Riegels fuer alle Ports auf einer Seite).
+   Platine: freie Pin-Platzierung. Raspberry Pi: optionale GPIO-Pins/USB-/
+   LAN-Anschluesse, ebenfalls frei platzierbar. */
+function hasIndividualPinPlacement(type) {
+  return type === "board" || type === "raspberry_pi";
 }
 function sideAxis(side) {
   return side === "left" || side === "right" ? "horizontal" : "vertical";
@@ -90,6 +166,124 @@ function getPortName(el, index) {
   }
   return null;
 }
+/* Individuelle Seite eines einzelnen Pins (nur fuer Platine/Raspberry Pi
+   relevant, siehe hasIndividualPinPlacement). Fehlt der Eintrag, wird reihum
+   auf bottom/right/top/left verteilt, damit auch ohne manuelle Zuweisung ein
+   sinnvolles Layout entsteht. */
+function getPinSide(el, index) {
+  const arr = el.pin_sides;
+  if (Array.isArray(arr) && PORT_SIDES.includes(arr[index])) return arr[index];
+  return ["bottom", "right", "top", "left"][index % 4];
+}
+/* Pin-Art nur fuer Raspberry Pi: "pin" (GPIO), "usb" oder "lan". */
+function getPinKind(el, index) {
+  const arr = el.pin_kinds;
+  if (Array.isArray(arr) && ["pin", "usb", "lan"].includes(arr[index])) return arr[index];
+  return "pin";
+}
+
+/* ------------------------------------------------------------------ */
+/* Schaltplan-Symbole (Anzeigebild) fuer Relay, Motor, Schalter, Taster */
+/* und Poti – kompakte Inline-SVGs, die im Element-Icon (26x26px) statt */
+/* eines einzelnen Icon-Zeichens dargestellt werden. `currentColor`     */
+/* uebernimmt automatisch die Typfarbe (siehe .el-icon style="color").  */
+/* ------------------------------------------------------------------ */
+
+function schematicSvg(inner) {
+  return `<svg viewBox="0 0 24 24" class="el-icon-svg" xmlns="http://www.w3.org/2000/svg">` +
+    `<g stroke="currentColor" fill="none" stroke-width="1.5" stroke-linecap="round">${inner}</g></svg>`;
+}
+
+function schematicRelaySvg(relayType) {
+  const coil = `<rect x="1" y="7.5" width="7" height="9" rx="1"/>
+    <line x1="-1" y1="9.5" x2="1" y2="9.5"/>
+    <line x1="-1" y1="14.5" x2="1" y2="14.5"/>
+    <circle cx="12" cy="12" r="1.1" fill="currentColor" stroke="none"/>`;
+  if (relayType === "oeffner") {
+    return schematicSvg(coil +
+      `<circle cx="21" cy="19" r="1.1" fill="currentColor" stroke="none"/>
+       <circle cx="21" cy="5" r="1.1" fill="none" stroke-width="1" stroke-dasharray="0.8,1.2"/>
+       <line x1="12" y1="12" x2="20.3" y2="18"/>`);
+  }
+  if (relayType === "wechsler") {
+    return schematicSvg(coil +
+      `<circle cx="21" cy="5" r="1.1" fill="currentColor" stroke="none"/>
+       <circle cx="21" cy="19" r="1.1" fill="currentColor" stroke="none"/>
+       <line x1="12" y1="12" x2="20.3" y2="18"/>
+       <line x1="12" y1="12" x2="20.3" y2="6" stroke-width="1" stroke-dasharray="0.8,1.2"/>`);
+  }
+  // schliesser (Standard)
+  return schematicSvg(coil +
+    `<circle cx="21" cy="5" r="1.1" fill="currentColor" stroke="none"/>
+     <circle cx="21" cy="19" r="1.1" fill="none" stroke-width="1" stroke-dasharray="0.8,1.2"/>
+     <line x1="12" y1="12" x2="20.3" y2="6"/>`);
+}
+
+function schematicMotorSvg(motorType) {
+  const body = `<circle cx="12" cy="11" r="7.5"/>
+    <text x="12" y="14.3" font-size="9" text-anchor="middle" fill="currentColor" stroke="none" font-family="Arial, sans-serif">M</text>`;
+  if (motorType === "bldc") {
+    return schematicSvg(body +
+      `<line x1="12" y1="3.5" x2="12" y2="0.5"/>
+       <line x1="6" y1="16" x2="3" y2="21"/>
+       <line x1="18" y1="16" x2="21" y2="21"/>`);
+  }
+  if (motorType === "stepper") {
+    return schematicSvg(body +
+      `<line x1="12" y1="3.5" x2="12" y2="0.5"/>
+       <line x1="12" y1="18.5" x2="12" y2="22.5"/>
+       <line x1="4.5" y1="11" x2="0.5" y2="11"/>
+       <line x1="19.5" y1="11" x2="23.5" y2="11"/>`);
+  }
+  // dc_ac (Standard): 2 Anschluesse unten
+  return schematicSvg(body +
+    `<line x1="8" y1="18" x2="8" y2="23"/>
+     <line x1="16" y1="18" x2="16" y2="23"/>`);
+}
+
+function schematicSwitchSvg() {
+  return schematicSvg(
+    `<circle cx="3" cy="18" r="1.4" fill="currentColor" stroke="none"/>
+     <circle cx="21" cy="18" r="1.4" fill="currentColor" stroke="none"/>
+     <line x1="0" y1="18" x2="3" y2="18"/>
+     <line x1="21" y1="18" x2="24" y2="18"/>
+     <line x1="3" y1="18" x2="16" y2="7"/>`);
+}
+
+function schematicButtonSvg() {
+  return schematicSvg(
+    `<circle cx="3" cy="19" r="1.4" fill="currentColor" stroke="none"/>
+     <circle cx="21" cy="19" r="1.4" fill="currentColor" stroke="none"/>
+     <line x1="0" y1="19" x2="3" y2="19"/>
+     <line x1="21" y1="19" x2="24" y2="19"/>
+     <line x1="3" y1="12" x2="21" y2="12"/>
+     <line x1="12" y1="3" x2="12" y2="12"/>
+     <line x1="8" y1="3" x2="16" y2="3"/>`);
+}
+
+function schematicPotiSvg() {
+  return schematicSvg(
+    `<rect x="3" y="9" width="18" height="6" rx="1"/>
+     <line x1="0" y1="12" x2="3" y2="12"/>
+     <line x1="21" y1="12" x2="24" y2="12"/>
+     <line x1="12" y1="1" x2="17" y2="9"/>
+     <path d="M 15.5 6.2 L 17 9 L 14 8.3 Z" fill="currentColor" stroke="none"/>`);
+}
+
+/* Waehlt zwischen einfachem Icon-Zeichen (def.icon) und einem der obigen
+   Schaltplan-Symbole, je nach Elementtyp (und bei Relay/Motor je nach
+   gewaehlter Bauart). */
+function getElementIconMarkup(el, def) {
+  switch (el.type) {
+    case "relay": return schematicRelaySvg(getRelayType(el));
+    case "motor": return schematicMotorSvg(getMotorType(el));
+    case "switch_2pos": return schematicSwitchSvg();
+    case "button": return schematicButtonSvg();
+    case "potentiometer": return schematicPotiSvg();
+    default: return escapeHtml(def.icon);
+  }
+}
+
 
 let config = null;
 let mode = "edit"; // "edit" | "use"
@@ -163,7 +357,7 @@ function buildPalette() {
     const item = document.createElement("div");
     item.className = "palette-item";
     item.title = "Hinzufuegen: " + def.label;
-    item.textContent = def.icon;
+    item.innerHTML = getElementIconMarkup({ type }, def);
     item.addEventListener("click", () => addElement(type));
     palette.appendChild(item);
   }
@@ -455,11 +649,54 @@ function renderElements() {
   computePortRelOffsets();
 }
 
+/* Erzeugt einen einzelnen Anschluss-Andockpunkt (Pin oder Port, je nach
+   Elementtyp – siehe portWord()). Wird sowohl vom gemeinsamen Portriegel
+   (buildPortsBar, eine Seite fuer alle Anschluesse) als auch von der
+   individuellen Pin-Platzierung (buildIndividualPinsLayer, jeder Anschluss
+   einzeln einer Seite zugeordnet – Platine/Raspberry Pi) verwendet. */
+function createPinDot(el, index, sideKey, side) {
+  const word = portWord(el.type);
+  const dot = document.createElement("div");
+  dot.className = "port-dot";
+  dot.dataset.port = String(index);
+  dot.dataset.side = sideKey;
+  const customName = getPortName(el, index);
+  const sideHint = sideKey === "b" ? " (" + sideLabel(side) + ")" : "";
+  const kind = el.type === "raspberry_pi" ? getPinKind(el, index) : "pin";
+  const kindLabel = kind === "usb" ? "USB" : kind === "lan" ? "LAN" : null;
+  dot.title = customName
+    ? `${customName} (${word} ${index + 1}${sideHint})`
+    : (kindLabel ? `${kindLabel} ${index + 1}` : `${word} ${index + 1}`) + sideHint +
+      " – Doppelklick: Namen vergeben";
+  dot.textContent = customName
+    ? (index + 1) + " " + customName
+    : (kindLabel ? kindLabel : String(index + 1));
+  if (kindLabel) dot.classList.add("port-kind-" + kind);
+  if (customName) dot.classList.add("port-named");
+  dot.addEventListener("mousedown", (e) => e.stopPropagation());
+  dot.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (mode === "edit" && connectMode) {
+      handleConnectPick(el.id, index, sideKey);
+    }
+  });
+  if (mode === "edit") {
+    dot.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (connectMode) return;
+      openPortNameEditor(el, index, e.clientX, e.clientY);
+    });
+  }
+  return dot;
+}
+
 /* Erzeugt eine Portreihe (ports-bar) fuer eine Seite des Elements.
-   sideKey ist "a" (primaere/konfigurierte Seite) oder "b" (bei Patchfeldern
-   die gegenueberliegende Seite mit paralleler Nummerierung/Benennung).
-   Beide Seiten teilen sich el.port_names, daher ist eine Umbenennung auf
-   der einen Seite automatisch auch auf der anderen sichtbar. */
+   sideKey ist "a" (primaere/konfigurierte Seite) oder "b" (bei Patchfeldern/
+   Klemmleisten die gegenueberliegende Seite mit paralleler Nummerierung/
+   Benennung). Beide Seiten teilen sich el.port_names, daher ist eine
+   Umbenennung auf der einen Seite automatisch auch auf der anderen
+   sichtbar. */
 function buildPortsBar(el, side, sideKey, axis, mirrored, portCount) {
   const bar = document.createElement("div");
   bar.className = "ports-bar " + (axis === "vertical" ? "bar-row" : "bar-col") +
@@ -467,35 +704,39 @@ function buildPortsBar(el, side, sideKey, axis, mirrored, portCount) {
   bar.dataset.side = sideKey;
 
   for (let i = 0; i < portCount; i++) {
-    const dot = document.createElement("div");
-    dot.className = "port-dot";
-    dot.dataset.port = String(i);
-    dot.dataset.side = sideKey;
-    const customName = getPortName(el, i);
-    const sideHint = sideKey === "b" ? " (" + sideLabel(side) + ")" : "";
-    dot.title = customName
-      ? `${customName} (Port ${i + 1}${sideHint})`
-      : "Port " + (i + 1) + sideHint + " – Doppelklick: Namen vergeben";
-    dot.textContent = customName ? (i + 1) + " " + customName : String(i + 1);
-    if (customName) dot.classList.add("port-named");
-    dot.addEventListener("mousedown", (e) => e.stopPropagation());
-    dot.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (mode === "edit" && connectMode) {
-        handleConnectPick(el.id, i, sideKey);
-      }
-    });
-    if (mode === "edit") {
-      dot.addEventListener("dblclick", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (connectMode) return;
-        openPortNameEditor(el, i, e.clientX, e.clientY);
-      });
-    }
-    bar.appendChild(dot);
+    bar.appendChild(createPinDot(el, i, sideKey, side));
   }
   return bar;
+}
+
+/* Individuelle Pin-Platzierung (Platine/Raspberry Pi, siehe
+   hasIndividualPinPlacement): jeder Pin kann einzeln einer Seite (oben/
+   unten/links/rechts) zugewiesen werden, statt eines gemeinsamen Riegels
+   fuer alle Anschluesse. Umgesetzt ueber absolut positionierte Punkte in
+   einer eigenen Layer-Ebene ueber dem Element – die eigentliche Andock-
+   Logik (computePortRelOffsets, connectionEndpoint) ist bar-unabhaengig
+   und funktioniert dadurch unveraendert weiter. */
+function buildIndividualPinsLayer(el, portCount) {
+  const layer = document.createElement("div");
+  layer.className = "individual-pins-layer";
+
+  const bySide = { top: [], bottom: [], left: [], right: [] };
+  for (let i = 0; i < portCount; i++) {
+    bySide[getPinSide(el, i)].push(i);
+  }
+
+  for (const side of PORT_SIDES) {
+    const indices = bySide[side];
+    if (indices.length === 0) continue;
+    const axis = sideAxis(side);
+    const row = document.createElement("div");
+    row.className = "individual-pins-row side-" + side + " " + (axis === "vertical" ? "row-h" : "row-v");
+    indices.forEach((i) => {
+      row.appendChild(createPinDot(el, i, "a", side));
+    });
+    layer.appendChild(row);
+  }
+  return layer;
 }
 
 function buildElementNode(el) {
@@ -512,22 +753,27 @@ function buildElementNode(el) {
 
   const elLinks = normalizeLinks(el.links);
   const portCount = getPortCount(el);
+  const individual = hasIndividualPinPlacement(el.type);
   const side = getPortSide(el);
   const mirrored = getPortMirror(el);
-  const dual = portCount > 0 && hasDualSides(el.type);
+  const dual = portCount > 0 && !individual && hasDualSides(el.type);
   const axis = sideAxis(side);
   const hostDisplay = getElementHost(el);
+  const word = portWord(el.type);
+  const wordPlural = portWordPlural(el.type);
 
-  if (portCount > 0) {
+  if (portCount > 0 && !individual) {
     node.classList.add("has-ports", "axis-" + axis);
     if (mirrored) node.classList.add("mirrored");
+  } else if (portCount > 0 && individual) {
+    node.classList.add("has-ports", "has-individual-pins");
   }
 
   const body = document.createElement("div");
   body.className = "el-body";
   body.innerHTML = `
     <div class="el-head">
-      <div class="el-icon" style="color:${def.color}">${def.icon}</div>
+      <div class="el-icon" style="color:${def.color}">${getElementIconMarkup(el, def)}</div>
       <div>
         <div class="el-name">${escapeHtml(el.name || "(ohne Namen)")}</div>
         <div class="el-type">${def.label}</div>
@@ -559,10 +805,12 @@ function buildElementNode(el) {
       btn.textContent = getLinkIcon(link.url) + " " + (link.label || "Webseite " + (i + 1));
       btn.title = getLinkScheme(link.url) === "rdp"
         ? link.url + " – laedt eine .rdp-Datei herunter (Windows-Remotedesktopverbindung)"
+        : getLinkScheme(link.url) === "mqtt"
+        ? "Sendet beim Klick eine MQTT-Nachricht an " + link.url + (link.topic ? " (Topic: " + link.topic + ")" : "")
         : link.url;
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
-        openLink(link.url);
+        openLink(link);
       });
       linksWrap.appendChild(btn);
     });
@@ -584,13 +832,13 @@ function buildElementNode(el) {
     });
     controls.appendChild(editBtn);
 
-    if (portCount > 0) {
+    if (portCount > 0 && !individual) {
       const rotateBtn = document.createElement("div");
       rotateBtn.className = "el-ctrl-btn";
       rotateBtn.textContent = "⟳";
       rotateBtn.title = dual
-        ? "Ports auf naechstes Seitenpaar drehen (aktuell: " + sideLabel(side) + " + " + sideLabel(OPPOSITE_SIDE[side]) + ")"
-        : "Ports auf naechste Seite drehen (aktuell: " + sideLabel(side) + ")";
+        ? wordPlural + " auf naechstes Seitenpaar drehen (aktuell: " + sideLabel(side) + " + " + sideLabel(OPPOSITE_SIDE[side]) + ")"
+        : wordPlural + " auf naechste Seite drehen (aktuell: " + sideLabel(side) + ")";
       rotateBtn.addEventListener("mousedown", (e) => e.stopPropagation());
       rotateBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -601,7 +849,7 @@ function buildElementNode(el) {
       const mirrorBtn = document.createElement("div");
       mirrorBtn.className = "el-ctrl-btn" + (mirrored ? " active" : "");
       mirrorBtn.textContent = "⇋";
-      mirrorBtn.title = "Portreihenfolge spiegeln";
+      mirrorBtn.title = wordPlural + "-Reihenfolge spiegeln";
       mirrorBtn.addEventListener("mousedown", (e) => e.stopPropagation());
       mirrorBtn.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -620,12 +868,17 @@ function buildElementNode(el) {
     }
   });
 
-  if (portCount > 0) {
-    /* Elemente mit Ports: Verbindungen duerfen nur an einem konkreten
-       Port-Andockpunkt gestartet/beendet werden, nicht am Element selbst.
-       Bei Patchfeldern (hasDualSides) gibt es zusaetzlich eine zweite,
-       identisch nummerierte/benannte Portreihe auf der gegenueberliegenden
-       Seite (z. B. Vorder-/Rueckseite). */
+  if (portCount > 0 && individual) {
+    /* Platine/Raspberry Pi: jeder Pin wird einzeln, je nach zugewiesener
+       Seite, absolut positioniert (siehe buildIndividualPinsLayer) statt in
+       einem gemeinsamen Riegel. */
+    node.appendChild(buildIndividualPinsLayer(el, portCount));
+  } else if (portCount > 0) {
+    /* Elemente mit Ports/Pins: Verbindungen duerfen nur an einem konkreten
+       Andockpunkt gestartet/beendet werden, nicht am Element selbst.
+       Bei Klemmleisten/Patchfeldern (hasDualSides) gibt es zusaetzlich eine
+       zweite, identisch nummerierte/benannte Reihe auf der
+       gegenueberliegenden Seite (z. B. Vorder-/Rueckseite). */
     node.appendChild(buildPortsBar(el, side, "a", axis, mirrored, portCount));
     if (dual) {
       node.appendChild(buildPortsBar(el, OPPOSITE_SIDE[side], "b", axis, mirrored, portCount));
@@ -659,7 +912,7 @@ function openPortNameEditor(el, portIndex, clientX, clientY) {
   input.type = "text";
   input.className = "port-name-input";
   input.maxLength = 40;
-  input.placeholder = "Name fuer Port " + (portIndex + 1);
+  input.placeholder = "Name fuer " + portWord(el.type) + " " + (portIndex + 1);
   input.value = getPortName(el, portIndex) || "";
 
   document.body.appendChild(input);
@@ -759,21 +1012,28 @@ function escapeHtml(str) {
    URLs (https://192.168.1.2/admin) ebenso wie mit reinen Host-/IP-Angaben
    ohne Schema (192.168.1.2). */
 /* Wandelt die Links eines Elements in ein einheitliches Format
-   { label, url } um. Unterstuetzt sowohl das alte Format (Array aus
-   reinen URL-Strings) als auch das neue Format, damit bestehende
-   config.json-Dateien weiterhin funktionieren. */
+   { label, url, topic?, payload? } um. Unterstuetzt sowohl das alte Format
+   (Array aus reinen URL-Strings) als auch das neue Format, damit
+   bestehende config.json-Dateien weiterhin funktionieren. topic/payload
+   sind nur bei mqtt://-Eintraegen gesetzt (siehe openLink/publishMqttLink). */
 function normalizeLinks(links) {
   if (!Array.isArray(links)) return [];
   return links
     .map((l) => {
       if (typeof l === "string") return { label: "", url: l.trim() };
-      if (l && typeof l === "object") return { label: (l.label || "").trim(), url: (l.url || "").trim() };
+      if (l && typeof l === "object") {
+        const out = { label: (l.label || "").trim(), url: (l.url || "").trim() };
+        if (typeof l.topic === "string" && l.topic.trim()) out.topic = l.topic.trim();
+        if (typeof l.payload === "string" && l.payload) out.payload = l.payload;
+        return out;
+      }
       return null;
     })
     .filter((l) => l && l.url);
 }
 
-/* Ermittelt das URL-Schema (http, https, rdp, vnc, ssh, ...) einer Adresse. */
+/* Ermittelt das URL-Schema (http, https, rdp, vnc, ssh, mqtt, ...) einer
+   Adresse. */
 function getLinkScheme(url) {
   const m = (url || "").match(/^([a-zA-Z][a-zA-Z0-9+.-]*):/);
   return m ? m[1].toLowerCase() : "";
@@ -785,10 +1045,13 @@ function getLinkIcon(url) {
   if (scheme === "rdp") return "🖥";
   if (scheme === "vnc") return "🖵";
   if (scheme === "ssh" || scheme === "telnet") return "⌘";
+  if (scheme === "mqtt") return "📡";
   return "↗";
 }
 
-/* Oeffnet eine hinterlegte Adresse.
+/* Oeffnet eine hinterlegte Adresse bzw. loest die hinterlegte Aktion aus.
+   `link` ist entweder das normalisierte {label,url,topic?,payload?}-Objekt
+   oder (Legacy-Aufrufe) ein reiner URL-String.
    - http(s): oeffnet einen neuen Tab.
    - rdp: Windows registriert "rdp://" standardmaessig NICHT als
      Protokoll, ein einfacher Link-Klick fuehrt dort also zu nichts.
@@ -799,12 +1062,23 @@ function getLinkIcon(url) {
      vorausgefuellter Zieladresse – ein zusaetzlicher Klick des Nutzers
      ist dabei unumgaenglich, da Browser aus Sicherheitsgruenden keine
      heruntergeladenen Dateien selbststaendig ausfuehren duerfen.
+   - mqtt: sendet ueber den Server (POST /api/mqtt/publish) eine MQTT-
+     Nachricht an Host/Topic aus der hinterlegten Adresse, mit dem
+     hinterlegten Payload (siehe publishMqttLink). Laeuft serverseitig,
+     da Browser aus Sicherheitsgruenden keine rohen TCP-Verbindungen zu
+     einem MQTT-Broker aufbauen koennen.
    - andere Protokolle (vnc://, ssh://, ...): werden ueber einen
      unsichtbaren Link-Klick ausgeloest, sofern im Betriebssystem/Browser
      ein passender Handler dafuer registriert ist (z. B. durch einen
      installierten VNC-/SSH-Client). */
-function openLink(url) {
+function openLink(link) {
+  const linkObj = typeof link === "string" ? { url: link } : (link || {});
+  const url = linkObj.url || "";
   const scheme = getLinkScheme(url);
+  if (scheme === "mqtt") {
+    publishMqttLink(linkObj);
+    return;
+  }
   if (scheme === "http" || scheme === "https" || scheme === "") {
     window.open(url, "_blank", "noopener");
     return;
@@ -824,6 +1098,43 @@ function openLink(url) {
   } catch (e) {
     window.open(url, "_blank", "noopener");
   }
+}
+
+/* Sendet eine MQTT-Nachricht ueber den Server (paho-mqtt, siehe app.py).
+   Adresse hat die Form "mqtt://host:port" (Port optional, Standard 1883);
+   Topic und Payload kommen aus den zusaetzlichen Link-Feldern (siehe
+   Link-Editor im Element-Dialog). */
+function publishMqttLink(link) {
+  const withoutScheme = (link.url || "").replace(/^mqtt:\/\//i, "").replace(/\/+$/, "");
+  const [hostPart] = withoutScheme.split("/");
+  const [host, portStr] = (hostPart || "").split(":");
+  const port = parseInt(portStr, 10) || 1883;
+  const topic = (link.topic || "").trim();
+  const payload = link.payload || "";
+
+  if (!host || !topic) {
+    showToast("⚠ MQTT: Broker-Host und Topic muessen gesetzt sein (im Element-Dialog bearbeiten).", 6000);
+    return;
+  }
+
+  setStatus("Sende MQTT-Nachricht an " + topic + " …");
+  fetch("/api/mqtt/publish", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ host, port, topic, payload }),
+  })
+    .then(async (res) => {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.status !== "ok") {
+        throw new Error((data && data.message) || ("HTTP " + res.status));
+      }
+      setStatus("MQTT-Nachricht an " + topic + " gesendet.");
+      showToast("✓ MQTT-Nachricht gesendet (" + topic + ").", 4000);
+    })
+    .catch((err) => {
+      setStatus("Fehler beim MQTT-Versand.");
+      showToast("⚠ MQTT-Versand fehlgeschlagen: " + err.message, 6500);
+    });
 }
 
 /* Erzeugt aus einer rdp://-Adresse eine echte .rdp-Datei (Format der
@@ -890,7 +1201,15 @@ function addElement(type) {
     y: snap(Math.max(0, centerY)),
     links: [],
   };
-  if (hasPorts(type)) {
+  if (type === "relay") {
+    el.relay_type = "schliesser";
+    el.ports = RELAY_TYPES.schliesser.pinCount;
+    el.port_names = RELAY_TYPES.schliesser.names.slice();
+  } else if (type === "motor") {
+    el.motor_type = "dc_ac";
+    el.ports = MOTOR_TYPES.dc_ac.pinCount;
+    el.port_names = MOTOR_TYPES.dc_ac.names.slice();
+  } else if (hasPorts(type) && DEFAULT_PORTS[type] > 0) {
     el.ports = DEFAULT_PORTS[type];
   }
   config.elements.push(el);
@@ -1042,55 +1361,177 @@ function finishDraggingElement() {
 }
 
 let pendingPortNames = [];
+let pendingPinSides = [];
+let pendingPinKinds = [];
 
+/* Aktualisiert Sichtbarkeit/Beschriftung der Anschluss-Felder im
+   Element-Dialog abhaengig vom gewaehlten Typ: normale Elemente mit
+   Ports/Pins zeigen ein Anzahl-Feld; Relay/Motor zeigen stattdessen eine
+   Kontaktart-/Motorart-Auswahl (Anzahl wird daraus automatisch abgeleitet);
+   Platine/Raspberry Pi (individuelle Platzierung) zeigen zusaetzlich eine
+   Seiten-Auswahl je Anschluss und einen "+ Anschluss hinzufuegen"-Button
+   statt eines festen Anzahl-Felds. */
 function updatePortsFieldVisibility() {
   const type = $("#fType").value;
   const row = $("#fPortsRow");
   const namesRow = $("#fPortNamesRow");
-  if (hasPorts(type)) {
-    row.classList.remove("hidden-field");
-    namesRow.classList.remove("hidden-field");
+  const relayRow = $("#fRelayTypeRow");
+  const motorRow = $("#fMotorTypeRow");
+  const addPinBtn = $("#fAddPin");
+  const portsInput = $("#fPorts");
+
+  relayRow.classList.toggle("hidden-field", type !== "relay");
+  motorRow.classList.toggle("hidden-field", type !== "motor");
+
+  if (!hasPorts(type)) {
+    row.classList.add("hidden-field");
+    namesRow.classList.add("hidden-field");
+    return;
+  }
+
+  namesRow.classList.remove("hidden-field");
+  $("#fPortsLabel").textContent = "Anzahl " + portWordPlural(type);
+  $("#fPortNamesLabel").textContent = portWordPlural(type) + "namen (optional, zusaetzlich zur Nummer)";
+
+  if (type === "relay" || type === "motor") {
+    // Anzahl ergibt sich automatisch aus der Kontakt-/Motorart, kein
+    // manuelles Anzahl-Feld noetig.
+    row.classList.add("hidden-field");
+    addPinBtn.classList.add("hidden-field");
     if (!$("#fPorts").value) $("#fPorts").value = DEFAULT_PORTS[type];
     resizePendingPortNames();
     renderPortNameInputs();
-  } else {
-    row.classList.add("hidden-field");
-    namesRow.classList.add("hidden-field");
+    return;
   }
+
+  const individual = hasIndividualPinPlacement(type);
+  if (individual) {
+    // Platine/Raspberry Pi: keine feste Anzahl vorgeben, Pins werden ueber
+    // "+ Anschluss hinzufuegen" individuell ergaenzt/entfernt.
+    row.classList.add("hidden-field");
+    addPinBtn.classList.remove("hidden-field");
+  } else {
+    row.classList.remove("hidden-field");
+    addPinBtn.classList.add("hidden-field");
+    portsInput.min = String(getMinPorts(type));
+    if (!$("#fPorts").value) $("#fPorts").value = DEFAULT_PORTS[type];
+  }
+  resizePendingPortNames();
+  renderPortNameInputs();
 }
 
 function resizePendingPortNames() {
-  let n = parseInt($("#fPorts").value, 10);
-  if (!Number.isFinite(n)) n = pendingPortNames.length || DEFAULT_PORTS[$("#fType").value] || 1;
-  n = Math.min(PORT_MAX, Math.max(PORT_MIN, n));
-  const next = [];
-  for (let i = 0; i < n; i++) next.push(pendingPortNames[i] || "");
-  pendingPortNames = next;
+  const type = $("#fType").value;
+  const individual = hasIndividualPinPlacement(type);
+  let n;
+  if (type === "relay") {
+    n = RELAY_TYPES[$("#fRelayType").value] ? RELAY_TYPES[$("#fRelayType").value].pinCount : RELAY_TYPES.schliesser.pinCount;
+  } else if (type === "motor") {
+    n = MOTOR_TYPES[$("#fMotorType").value] ? MOTOR_TYPES[$("#fMotorType").value].pinCount : MOTOR_TYPES.dc_ac.pinCount;
+  } else if (individual) {
+    // Anzahl wird ausschliesslich ueber +/- Buttons gesteuert.
+    n = pendingPortNames.length;
+  } else {
+    n = parseInt($("#fPorts").value, 10);
+    if (!Number.isFinite(n)) n = pendingPortNames.length || DEFAULT_PORTS[type] || getMinPorts(type);
+    n = Math.min(PORT_MAX, Math.max(getMinPorts(type), n));
+    $("#fPorts").value = n;
+  }
+  const nextNames = [], nextSides = [], nextKinds = [];
+  for (let i = 0; i < n; i++) {
+    nextNames.push(pendingPortNames[i] || "");
+    nextSides.push(pendingPinSides[i] || ["bottom", "right", "top", "left"][i % 4]);
+    nextKinds.push(pendingPinKinds[i] || "pin");
+  }
+  pendingPortNames = nextNames;
+  pendingPinSides = nextSides;
+  pendingPinKinds = nextKinds;
 }
 
 function renderPortNameInputs() {
+  const type = $("#fType").value;
+  const individual = hasIndividualPinPlacement(type);
+  const showKind = type === "raspberry_pi";
   const list = $("#fPortNamesList");
   list.innerHTML = "";
   pendingPortNames.forEach((name, i) => {
     const row = document.createElement("div");
-    row.className = "port-name-row";
+    row.className = "port-name-row" + (individual ? " port-name-row-individual" : "");
     const idx = document.createElement("span");
     idx.className = "port-name-idx";
     idx.textContent = "P" + (i + 1);
     const input = document.createElement("input");
     input.type = "text";
     input.maxLength = 40;
-    input.placeholder = "Port " + (i + 1);
+    input.placeholder = portWord(type) + " " + (i + 1);
     input.value = name;
     input.addEventListener("input", () => { pendingPortNames[i] = input.value; });
     row.appendChild(idx);
     row.appendChild(input);
+
+    if (showKind) {
+      const kindSelect = document.createElement("select");
+      kindSelect.className = "pin-kind-select";
+      kindSelect.title = "Anschlussart";
+      [["pin", "Pin"], ["usb", "USB"], ["lan", "LAN"]].forEach(([val, txt]) => {
+        const o = document.createElement("option");
+        o.value = val; o.textContent = txt;
+        kindSelect.appendChild(o);
+      });
+      kindSelect.value = pendingPinKinds[i] || "pin";
+      kindSelect.addEventListener("change", () => { pendingPinKinds[i] = kindSelect.value; });
+      row.appendChild(kindSelect);
+    }
+
+    if (individual) {
+      const sideSelect = document.createElement("select");
+      sideSelect.className = "pin-side-select";
+      sideSelect.title = "Seite dieses Anschlusses";
+      [["bottom", "unten"], ["top", "oben"], ["left", "links"], ["right", "rechts"]].forEach(([val, txt]) => {
+        const o = document.createElement("option");
+        o.value = val; o.textContent = txt;
+        sideSelect.appendChild(o);
+      });
+      sideSelect.value = pendingPinSides[i] || "bottom";
+      sideSelect.addEventListener("change", () => { pendingPinSides[i] = sideSelect.value; });
+      row.appendChild(sideSelect);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "link-edit-remove";
+      removeBtn.title = "Diesen Anschluss entfernen";
+      removeBtn.textContent = "✕";
+      removeBtn.addEventListener("click", () => {
+        pendingPortNames.splice(i, 1);
+        pendingPinSides.splice(i, 1);
+        pendingPinKinds.splice(i, 1);
+        renderPortNameInputs();
+      });
+      row.appendChild(removeBtn);
+    }
+
     list.appendChild(row);
   });
 }
 
 $("#fPorts").addEventListener("input", () => {
   resizePendingPortNames();
+  renderPortNameInputs();
+});
+$("#fRelayType").addEventListener("change", () => {
+  const rt = RELAY_TYPES[$("#fRelayType").value] || RELAY_TYPES.schliesser;
+  pendingPortNames = rt.names.slice();
+  renderPortNameInputs();
+});
+$("#fMotorType").addEventListener("change", () => {
+  const mt = MOTOR_TYPES[$("#fMotorType").value] || MOTOR_TYPES.dc_ac;
+  pendingPortNames = mt.names.slice();
+  renderPortNameInputs();
+});
+$("#fAddPin").addEventListener("click", () => {
+  pendingPortNames.push("");
+  pendingPinSides.push(["bottom", "right", "top", "left"][pendingPortNames.length % 4]);
+  pendingPinKinds.push("pin");
   renderPortNameInputs();
 });
 
@@ -1142,6 +1583,11 @@ function renderLinksEditor() {
     urlInput.placeholder = "https://192.168.1.2/admin";
     urlInput.value = link.url || "";
     urlInput.addEventListener("input", () => { pendingLinks[i].url = urlInput.value; });
+    urlInput.addEventListener("blur", () => {
+      // Zeigt/versteckt die Topic/Payload-Felder, falls das Schema per Hand
+      // (nicht ueber die Schnellauswahl) auf mqtt:// geaendert wurde.
+      renderLinksEditor();
+    });
 
     const schemeSelect = document.createElement("select");
     schemeSelect.className = "link-edit-scheme";
@@ -1151,6 +1597,7 @@ function renderLinksEditor() {
       { value: "rdp://", text: "RDP" },
       { value: "vnc://", text: "VNC" },
       { value: "ssh://", text: "SSH" },
+      { value: "mqtt://", text: "MQTT" },
       { value: "", text: "…" },
     ].forEach((opt) => {
       const o = document.createElement("option");
@@ -1166,6 +1613,7 @@ function renderLinksEditor() {
       urlInput.value = schemeSelect.value + withoutScheme;
       pendingLinks[i].url = urlInput.value;
       urlInput.focus();
+      renderLinksEditor();
     });
 
     bottomRow.appendChild(schemeSelect);
@@ -1173,6 +1621,34 @@ function renderLinksEditor() {
 
     row.appendChild(topRow);
     row.appendChild(bottomRow);
+
+    // --- MQTT-Zeile: Broker-Adresse (oben) + Topic/Payload (nur bei
+    //     mqtt://-Schema sichtbar) – beim Klick auf die Schaltflaeche wird
+    //     dann keine URL geoeffnet, sondern ueber den Server eine
+    //     MQTT-Nachricht an Topic mit Payload gesendet (siehe openLink). */
+    if (getLinkScheme(link.url) === "mqtt") {
+      const mqttRow = document.createElement("div");
+      mqttRow.className = "link-edit-mqtt";
+
+      const topicInput = document.createElement("input");
+      topicInput.type = "text";
+      topicInput.className = "link-edit-mqtt-topic";
+      topicInput.placeholder = "Topic (z. B. schaltschrank1/relais1/set)";
+      topicInput.value = link.topic || "";
+      topicInput.addEventListener("input", () => { pendingLinks[i].topic = topicInput.value; });
+
+      const payloadInput = document.createElement("input");
+      payloadInput.type = "text";
+      payloadInput.className = "link-edit-mqtt-payload";
+      payloadInput.placeholder = "Payload (z. B. ON)";
+      payloadInput.value = link.payload || "";
+      payloadInput.addEventListener("input", () => { pendingLinks[i].payload = payloadInput.value; });
+
+      mqttRow.appendChild(topicInput);
+      mqttRow.appendChild(payloadInput);
+      row.appendChild(mqttRow);
+    }
+
     list.appendChild(row);
   });
 }
@@ -1191,16 +1667,41 @@ function openElementModal(id) {
   $("#elementModalTitle").textContent = "Element bearbeiten";
   $("#fName").value = el.name || "";
   $("#fLocation").value = el.location || "";
+  populateLocationSuggestions();
   $("#fType").value = el.type;
+  $("#fRelayType").value = getRelayType(el);
+  $("#fMotorType").value = getMotorType(el);
   pendingLinks = normalizeLinks(el.links);
   renderLinksEditor();
-  $("#fPorts").value = hasPorts(el.type) ? getPortCount(el) : "";
-  pendingPortNames = hasPorts(el.type)
-    ? Array.from({ length: getPortCount(el) }, (_, i) => (el.port_names && el.port_names[i]) || "")
-    : [];
+  const n = hasPorts(el.type) ? getPortCount(el) : 0;
+  $("#fPorts").value = n || "";
+  pendingPortNames = Array.from({ length: n }, (_, i) => (el.port_names && el.port_names[i]) || "");
+  pendingPinSides = Array.from({ length: n }, (_, i) => getPinSide(el, i));
+  pendingPinKinds = Array.from({ length: n }, (_, i) => getPinKind(el, i));
   updatePortsFieldVisibility();
   $("#elementModal").classList.remove("hidden");
   $("#fName").focus();
+}
+
+/* Fuellt die Ortsvorschlaege (datalist) mit bereits im Plan verwendeten
+   Standorten sowie ein paar generischen Vorschlaegen (z. B. fuer
+   Schaltschraenke) – bewusst KEIN "Serverraum" mehr, da dieses Projekt
+   kein Netzwerkplan mehr ist, sondern ein allgemeiner Verkabelungsplan. */
+function populateLocationSuggestions() {
+  const list = $("#fLocationSuggestions");
+  const used = new Set(
+    (config.elements || [])
+      .map((e) => (e.location || "").trim())
+      .filter(Boolean)
+  );
+  const defaults = ["Schaltschrank 1", "Schaltschrank 2", "Maschine A", "Feldebene"];
+  defaults.forEach((d) => used.add(d));
+  list.innerHTML = "";
+  Array.from(used).sort().forEach((loc) => {
+    const opt = document.createElement("option");
+    opt.value = loc;
+    list.appendChild(opt);
+  });
 }
 
 $("#fType").addEventListener("change", updatePortsFieldVisibility);
@@ -1214,29 +1715,61 @@ $("#fSave").addEventListener("click", () => {
   el.location = $("#fLocation").value.trim();
   el.type = $("#fType").value;
   el.links = pendingLinks
-    .map((l) => ({ label: (l.label || "").trim(), url: (l.url || "").trim() }))
+    .map((l) => ({
+      label: (l.label || "").trim(),
+      url: (l.url || "").trim(),
+      topic: (l.topic || "").trim() || undefined,
+      payload: (l.payload || "").trim() || undefined,
+    }))
     .filter((l) => l.url);
 
-  if (hasPorts(el.type)) {
+  if (el.type === "relay") {
+    el.relay_type = RELAY_TYPES[$("#fRelayType").value] ? $("#fRelayType").value : "schliesser";
+    resizePendingPortNames();
+    const n = RELAY_TYPES[el.relay_type].pinCount;
+    el.ports = n;
+    el.port_names = pendingPortNames.slice(0, n).map((s) => s.trim());
+    delete el.pin_sides;
+    delete el.pin_kinds;
+    clampConnectionsToPortCount(el, n);
+  } else if (el.type === "motor") {
+    el.motor_type = MOTOR_TYPES[$("#fMotorType").value] ? $("#fMotorType").value : "dc_ac";
+    resizePendingPortNames();
+    const n = MOTOR_TYPES[el.motor_type].pinCount;
+    el.ports = n;
+    el.port_names = pendingPortNames.slice(0, n).map((s) => s.trim());
+    delete el.pin_sides;
+    delete el.pin_kinds;
+    clampConnectionsToPortCount(el, n);
+  } else if (hasIndividualPinPlacement(el.type)) {
+    resizePendingPortNames();
+    const n = pendingPortNames.length;
+    el.ports = n;
+    el.port_names = pendingPortNames.slice(0, n).map((s) => s.trim());
+    el.pin_sides = pendingPinSides.slice(0, n);
+    if (el.type === "raspberry_pi") {
+      el.pin_kinds = pendingPinKinds.slice(0, n);
+    } else {
+      delete el.pin_kinds;
+    }
+    clampConnectionsToPortCount(el, n);
+  } else if (hasPorts(el.type)) {
     let n = parseInt($("#fPorts").value, 10);
     if (!Number.isFinite(n)) n = DEFAULT_PORTS[el.type];
-    n = Math.min(PORT_MAX, Math.max(PORT_MIN, n));
+    n = Math.min(PORT_MAX, Math.max(getMinPorts(el.type), n));
     el.ports = n;
     resizePendingPortNames();
     el.port_names = pendingPortNames.slice(0, n).map((s) => s.trim());
-    // Verbindungen, die auf nun nicht mehr existierende Ports zeigen, kappen
-    // (Verbindung bleibt bestehen, dockt dann am Element-Mittelpunkt an).
-    config.connections.forEach((c) => {
-      if (c.from === el.id && c.from_port !== null && c.from_port !== undefined && c.from_port >= n) {
-        c.from_port = null;
-      }
-      if (c.to === el.id && c.to_port !== null && c.to_port !== undefined && c.to_port >= n) {
-        c.to_port = null;
-      }
-    });
+    delete el.pin_sides;
+    delete el.pin_kinds;
+    clampConnectionsToPortCount(el, n);
   } else {
     delete el.ports;
     delete el.port_names;
+    delete el.pin_sides;
+    delete el.pin_kinds;
+    delete el.relay_type;
+    delete el.motor_type;
   }
 
   $("#elementModal").classList.add("hidden");
@@ -1245,12 +1778,27 @@ $("#fSave").addEventListener("click", () => {
   persistConfig();
 });
 
+/* Verbindungen, die auf nun nicht mehr existierende Ports/Pins zeigen,
+   kappen (Verbindung bleibt bestehen, dockt dann am Element-Mittelpunkt
+   an). */
+function clampConnectionsToPortCount(el, n) {
+  config.connections.forEach((c) => {
+    if (c.from === el.id && c.from_port !== null && c.from_port !== undefined && c.from_port >= n) {
+      c.from_port = null;
+    }
+    if (c.to === el.id && c.to_port !== null && c.to_port !== undefined && c.to_port >= n) {
+      c.to_port = null;
+    }
+  });
+}
+
 $("#fDelete").addEventListener("click", () => {
   if (!confirm("Dieses Element inklusive aller Verbindungen loeschen?")) return;
   config.elements = config.elements.filter((x) => x.id !== editingElementId);
   config.connections = config.connections.filter(
     (c) => c.from !== editingElementId && c.to !== editingElementId
   );
+  cleanupOrphanCables();
   $("#elementModal").classList.add("hidden");
   renderAll();
   persistConfig();
@@ -1271,7 +1819,7 @@ $("#btnConnectMode").addEventListener("click", () => {
   $("#btnConnectMode").classList.toggle("btn-primary", connectMode);
   clearConnectPickHighlight();
   setStatus(connectMode
-    ? "Verbindungsmodus: Element bzw. bei Switch/Router/Patchfeld einen Port anklicken."
+    ? "Verbindungsmodus: Element anklicken – bei Elementen mit Anschlüssen einen konkreten Pin/Port anklicken."
     : "Bereit");
 });
 
@@ -1331,6 +1879,7 @@ function handleConnectPick(id, port, side) {
 
 function renderConnections() {
   connectionLayer.innerHTML = "";
+  const labeledCableIds = new Set();
   for (const conn of config.connections) {
     const fromEl = config.elements.find((x) => x.id === conn.from);
     const toEl = config.elements.find((x) => x.id === conn.to);
@@ -1346,6 +1895,36 @@ function renderConnections() {
 
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.style.pointerEvents = "auto";
+
+    // Kabel-Buendel: liegt die Verbindung in einem Kabel, wird darunter
+    // eine breitere, halbtransparente "Huelle" in der Kabelfarbe gezeichnet.
+    // Ueberlappende Adern desselben Kabels (typischer Fall: gleiche
+    // Endpunkte) verschmelzen dadurch optisch zu einem gemeinsamen Strang.
+    const cable = conn.cable_id ? getCableById(conn.cable_id) : null;
+    if (cable) {
+      const sleeve = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      sleeve.setAttribute("d", path);
+      sleeve.setAttribute("class", "cable-sleeve");
+      sleeve.setAttribute("stroke", cable.color || "#5c6b7f");
+      sleeve.setAttribute("stroke-width", (conn.thickness || 4) + 9);
+      sleeve.style.pointerEvents = "none";
+      group.appendChild(sleeve);
+
+      if (cable.name && !labeledCableIds.has(cable.id)) {
+        labeledCableIds.add(cable.id);
+        const points = [p1, ...conn.waypoints, p2];
+        const mid = pathMidpoint(points);
+        const labelPos = { x: mid.x, y: mid.y - 18 };
+        const cableLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
+        cableLabel.setAttribute("x", labelPos.x);
+        cableLabel.setAttribute("y", labelPos.y);
+        cableLabel.setAttribute("class", "cable-label");
+        cableLabel.setAttribute("text-anchor", "middle");
+        cableLabel.textContent = "🖇 " + cable.name;
+        cableLabel.style.fill = cable.color || "#5c6b7f";
+        group.appendChild(cableLabel);
+      }
+    }
 
     const hitbox = document.createElementNS("http://www.w3.org/2000/svg", "path");
     hitbox.setAttribute("d", path);
@@ -1364,7 +1943,7 @@ function renderConnections() {
 
     if (mode === "edit") {
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
-      title.textContent = "Klick (an beliebiger Stelle der Leitung): Details bearbeiten (Staerke, Wegpunkte zuruecksetzen, Loeschen)";
+      title.textContent = "Klick (an beliebiger Stelle der Leitung): Details bearbeiten (Staerke, Kabel-Zugehoerigkeit, Wegpunkte zuruecksetzen, Loeschen)";
       hitbox.appendChild(title);
 
       hitbox.addEventListener("click", () => {
@@ -1375,6 +1954,7 @@ function renderConnections() {
       const title = document.createElementNS("http://www.w3.org/2000/svg", "title");
       title.textContent = "Klick: Leitung hervorheben";
       hitbox.appendChild(title);
+
 
       hitbox.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1522,15 +2102,21 @@ function renderConnections() {
 }
 
 /* Ermittelt die Austrittsrichtung eines Verbindungsendes: bei einem
-   konkreten Port zeigt die Leitung senkrecht von der Portseite weg, damit
-   Leitungen nicht quer durch das Element oder andere Elemente laufen und
-   sich weniger leicht "verknoten". Ohne konkreten Port: keine feste
-   Richtung. */
+   konkreten Port/Pin zeigt die Leitung senkrecht von dessen Seite weg,
+   damit Leitungen nicht quer durch das Element oder andere Elemente
+   laufen und sich weniger leicht "verknoten". Ohne konkreten Port/Pin:
+   keine feste Richtung. */
 function connectionDirection(el, portIndex, portSide) {
   if (portIndex === null || portIndex === undefined) return null;
   if (!hasPorts(el.type)) return null;
-  const primarySide = getPortSide(el);
-  const side = portSide === "b" ? OPPOSITE_SIDE[primarySide] : primarySide;
+  let side;
+  if (hasIndividualPinPlacement(el.type)) {
+    // Platine/Raspberry Pi: jeder Pin hat seine eigene Seite.
+    side = getPinSide(el, portIndex);
+  } else {
+    const primarySide = getPortSide(el);
+    side = portSide === "b" ? OPPOSITE_SIDE[primarySide] : primarySide;
+  }
   return { bottom: { x: 0, y: 1 }, top: { x: 0, y: -1 }, left: { x: -1, y: 0 }, right: { x: 1, y: 0 } }[side];
 }
 
@@ -1728,6 +2314,7 @@ function openConnContextMenu(conn, canvasPoint, clientX, clientY) {
   deleteBtn.addEventListener("click", () => {
     if (!confirm("Diese Verbindung wirklich entfernen?")) return;
     config.connections = config.connections.filter((c) => c.id !== conn.id);
+    cleanupOrphanCables();
     closeConnContextMenu(true);
     renderConnections();
     persistConfig();
@@ -1843,6 +2430,45 @@ function connectionEndpoint(el, portIndex, portSide) {
 /* Geschwungene, dicke Verbindungslinien im Stil von harness.design –
    siehe buildSmoothPath() weiter oben fuer das eigentliche Routing. */
 
+/* ------------------------------------------------------------------ */
+/* Kabel-Buendel: mehrere Verbindungen zu einem gemeinsamen "Kabel"     */
+/* zusammenfassen (z. B. alle Adern eines Motorkabels). Verwaltung      */
+/* erfolgt ueber das Verbindungs-Bearbeiten-Modal (Feld "Kabel-Buendel"). */
+/* ------------------------------------------------------------------ */
+
+function getCables() {
+  if (!Array.isArray(config.cables)) config.cables = [];
+  return config.cables;
+}
+function getCableById(id) {
+  return getCables().find((c) => c.id === id) || null;
+}
+/* Entfernt Kabel, auf die keine Verbindung mehr verweist (z. B. nach dem
+   Entfernen der letzten Ader oder dem Umhaengen auf ein anderes Kabel). */
+function cleanupOrphanCables() {
+  const used = new Set(config.connections.map((c) => c.cable_id).filter(Boolean));
+  config.cables = getCables().filter((c) => used.has(c.id));
+}
+function populateCableSelect(currentCableId) {
+  const sel = $("#cCable");
+  sel.innerHTML = "";
+  const noneOpt = document.createElement("option");
+  noneOpt.value = "";
+  noneOpt.textContent = "— Kein Kabel —";
+  sel.appendChild(noneOpt);
+  getCables().forEach((cable) => {
+    const o = document.createElement("option");
+    o.value = cable.id;
+    o.textContent = cable.name;
+    sel.appendChild(o);
+  });
+  const newOpt = document.createElement("option");
+  newOpt.value = "__new__";
+  newOpt.textContent = "+ Neues Kabel…";
+  sel.appendChild(newOpt);
+  sel.value = currentCableId || "";
+}
+
 function openConnModal(id) {
   editingConnId = id;
   const conn = config.connections.find((c) => c.id === id);
@@ -1855,6 +2481,7 @@ function openConnModal(id) {
   $$(".color-swatch").forEach((s) => {
     s.classList.toggle("selected", s.dataset.color === selectedColor);
   });
+  populateCableSelect(conn.cable_id || "");
   $("#connModal").classList.remove("hidden");
 }
 
@@ -1880,6 +2507,25 @@ $("#cSave").addEventListener("click", () => {
   if (!conn.label) conn.label_at = null;
   conn.thickness = parseInt($("#cThickness").value, 10);
   conn.color = selectedColor;
+
+  const cableVal = $("#cCable").value;
+  if (cableVal === "__new__") {
+    const name = (window.prompt('Name des neuen Kabels (z. B. "Motorkabel 1"):', "") || "").trim();
+    if (name) {
+      const newCable = {
+        id: "cable-" + Date.now() + "-" + Math.floor(Math.random() * 1000),
+        name,
+        color: "#5c6b7f",
+      };
+      getCables().push(newCable);
+      conn.cable_id = newCable.id;
+    }
+    // Abgebrochen (leerer Name) -> bisherige Kabel-Zuordnung unveraendert lassen.
+  } else {
+    conn.cable_id = cableVal || null;
+  }
+  cleanupOrphanCables();
+
   $("#connModal").classList.add("hidden");
   renderConnections();
   persistConfig();
@@ -1887,6 +2533,7 @@ $("#cSave").addEventListener("click", () => {
 
 $("#cDelete").addEventListener("click", () => {
   config.connections = config.connections.filter((c) => c.id !== editingConnId);
+  cleanupOrphanCables();
   $("#connModal").classList.add("hidden");
   renderConnections();
   persistConfig();

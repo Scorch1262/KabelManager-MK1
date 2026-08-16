@@ -2,6 +2,82 @@
 
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [3.1.0] – PDF-Leitungsführung 1:1 zur Webansicht, Pin/Port-Umbenennung, viele neue Elementtypen, Kabel-Bündel, MQTT
+
+- **PDF-Export folgt jetzt exakt derselben Leitungsführung wie die
+  Webansicht.** Bisher wurden im PDF nur die gleichen Punkte gerade
+  verbunden; jetzt bildet `build_smooth_path_segments()` in `app.py` die
+  Bezier-Kurven-Berechnung aus `buildSmoothPath()` in `static/app.js`
+  mathematisch exakt nach (inkl. der Anti-Verknoten-Austrittsrichtung an
+  Ports/Pins und der Catmull-Rom-aehnlichen Tangenten an Wegpunkten) –
+  numerisch auf viele Nachkommastellen identisch getestet.
+- **"Ports" heißen jetzt "Pins"** – außer bei echten Netzwerkgeräten
+  (Router, Ethernet Switch sowie Legacy-Netzwerktypen wie Switch/
+  Patchfeld), wo es weiterhin "Ports" heißt (`portWord()`/`isNetworkDevice()`
+  in `static/app.js`, `port_word()`/`is_network_device()` in `app.py`).
+  Betroffen: Beschriftungen im Bearbeiten-Dialog, Tooltips an den
+  Anschluss-Punkten, Dreh-/Spiegeln-Buttons, Verbindungsmodus-Statustext,
+  Netzliste.
+- **Ortsvorschläge**: Das Ortsfeld schlägt jetzt "Schaltschrank 1/2",
+  "Maschine A", "Feldebene" sowie bereits im Plan verwendete Standorte vor
+  (Datalist) – "Serverraum" (Netzwerkplan-Relikt) wurde entfernt.
+- **Kabel-Bündel**: Mehrere Verbindungen lassen sich im
+  Verbindungs-Dialog einem gemeinsamen "Kabel" zuordnen (neues Feld
+  "Kabel-Bündel", per Dropdown ein bestehendes Kabel waehlen oder ein
+  neues anlegen). Verbindungen im selben Kabel werden mit einer
+  gemeinsamen, halbtransparenten Kabel-Hülle in Kabelfarbe UND
+  Kabel-Namen dargestellt – sowohl in der Webansicht als auch im
+  PDF-Export. Neues Top-Level-Feld `config.cables[]`
+  (`{id, name, color}`), Verbindungen bekommen ein optionales
+  `cable_id`-Feld. Die Netzliste (CSV) hat eine neue Spalte "Kabel".
+- **Spannungsversorgung und Batterie** haben jetzt mindestens 2 Pins
+  (Default "+"/"-").
+- **Relay**: Kontaktart auswählbar (Schließer/Öffner/Wechsler), daraus
+  ergibt sich automatisch die passende Pin-Anzahl (4/4/5, davon immer 2
+  Spulen-Pins) mit sinnvollen DIN-nahen Standard-Pinnamen
+  (11/12/14-Klemmenbezeichnungen). Anzeige-Icon ist jetzt ein kleines
+  Schaltplansymbol (Spule + Kontaktanordnung), das sich je nach
+  Kontaktart unterscheidet.
+- **Motor**: Bauart auswählbar (Gleich-/Wechselstrommotor = 2 Pins,
+  bürstenloser Motor/BLDC = 3 Pins "U/V/W", Schrittmotor = 4 Pins
+  "A+/A-/B+/B-"), jeweils mit passendem Schaltplan-Icon.
+- **Platine**: frei waehlbare Anzahl an Pins, deren Seite (oben/unten/
+  links/rechts) sich pro Pin einzeln festlegen laesst (statt eines
+  gemeinsamen Portriegels fuer alle Anschluesse auf einer Seite).
+- **Raspberry Pi**: kann jetzt optional GPIO-Pins, USB- und LAN-
+  Anschlüsse einzeln hinzufügen (gleiches Prinzip wie bei der Platine,
+  zusätzlich mit einer Art-Auswahl Pin/USB/LAN je Anschluss). Ohne
+  hinzugefügte Anschlüsse verhält sich der Raspberry Pi wie bisher
+  (Verbindungen docken am Element-Mittelpunkt an).
+- **Neue Elemente**: Ethernet Switch (echtes Netzwerkgerät, 8 Ports),
+  Schalter, Taster, Poti – jeweils mit eigenem Schaltplan-Symbol als
+  Anzeigebild.
+- **MQTT-Versand über Schaltflächen**: Eine verknüpfte Aktion an einem
+  Element kann jetzt das Schema `mqtt://` nutzen; im Bearbeiten-Dialog
+  erscheinen dann zusätzliche Felder für Topic und Payload. Ein Klick auf
+  die Schaltfläche sendet die Nachricht über den neuen Server-Endpunkt
+  `POST /api/mqtt/publish` (Paket `paho-mqtt`, neu in `requirements.txt`;
+  fehlt es, liefert die Schaltfläche eine verständliche Fehlermeldung
+  statt eines Absturzes). Erfolgs- und Fehlerfall gegen einen echten
+  Mosquitto-Testbroker verifiziert.
+- Neue Standard-`config.json` mit einem Beispiel, das die neuen
+  Möglichkeiten zeigt (Relay als Wechsler, Schrittmotor, Platine mit
+  individuell platzierten Pins, Raspberry Pi mit USB-/LAN-Anschluss,
+  MQTT-Schaltfläche, Kabel-Bündel).
+- **Abwärtskompatibilität** durchgehend erhalten und getestet: Elemente
+  ohne `relay_type`/`motor_type` (aus v3.0.0) fallen auf die jeweilige
+  Standard-Bauart zurück; Konfigurationen ohne `cables`-Feld (aus v3.0.0
+  oder älter) funktionieren unveraendert; Legacy-Netzwerktypen (`switch`,
+  `patchpanel`, `gateway`, ...) aus der Netzwerkplan-Aera behalten ihre
+  Ports samt "Port"-Wortwahl. Kein bestehendes JSON-Feld wurde umbenannt
+  oder entfernt.
+- Getestet per jsdom (60 Regressionstests: 48 neue Funktionstests + 12
+  Abwärtskompatibilitäts-Tests) sowie numerischem Abgleich der
+  PDF-Kurvenmathematik gegen die tatsächliche JS-Implementierung
+  (identische Kontrollpunkte auf > 10 Nachkommastellen). PDF-Ausgabe
+  zusätzlich visuell per Rasterung (PyMuPDF) auf beiden
+  Hintergrundvarianten geprüft.
+
 ## [3.0.0] – Umstellung von "Netzwerkplan" auf "Verkabelungsplan" + PDF-/Netzlisten-Export
 
 **Achtung: Major-Version-Sprung.** Das Programm ist inhaltlich kein reiner
