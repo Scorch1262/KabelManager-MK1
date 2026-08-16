@@ -2,7 +2,7 @@
 
 ![Bild](Unbenannt.PNG)
 
-**Aktuelle Version: 3.1.1** – siehe [CHANGELOG.md](CHANGELOG.md) für alle
+**Aktuelle Version: 3.2.0** – siehe [CHANGELOG.md](CHANGELOG.md) für alle
 Änderungen.
 
 Ein lokal laufender Webserver, der einen interaktiven Verkabelungsplan
@@ -11,10 +11,11 @@ Motor, Antrieb, Platine, Steuergerät, Klemmleiste, Delay, Raspberry Pi,
 Kamera, Router, Ethernet Switch, Relay, Schalter, Taster, Poti usw.,
 verbunden durch farbige Leitungen, optional zu Kabel-Bündeln
 zusammengefasst). Erreichbar unter der IP des Rechners im lokalen Netzwerk.
-Dark-Theme im Stil von Anduril Lattice, Verbindungslinien im Stil von
-harness.design. Der Plan lässt sich als PDF (Querformat, dunkler oder
-heller Hintergrund, mit exakt derselben Leitungsführung wie in der
-Webansicht) sowie als Netzliste (CSV-Tabelle aller Verbindungen)
+Dark-Theme im Stil von Anduril Lattice, Leitungsführung im Stil
+klassischer Netzwerkplaner (gerade Strecken, rechtwinklige Verläufe,
+saubere Andockung an Ports/Pins). Der Plan lässt sich als PDF (Querformat,
+dunkler oder heller Hintergrund, mit exakt derselben Leitungsführung wie
+in der Webansicht) sowie als Netzliste (CSV-Tabelle aller Verbindungen)
 exportieren. Element-Schaltflächen können neben Web/RDP/VNC/SSH auch
 MQTT-Nachrichten versenden.
 
@@ -250,9 +251,21 @@ solange gültiges JSON erhalten bleibt.
   die Leitung selbst öffnet direkt den vollständigen Dialog mit
   zusätzlicher Einstellung für die Leitungsstärke, Kabel-Zugehörigkeit
   und „Linie zurücksetzen" (entfernt alle Wegpunkte auf einmal).
+- **Leitungsführung:** Ohne manuell gesetzte Wegpunkte verlaufen
+  Leitungen automatisch als gerade Streckenabschnitte mit einer kurzen,
+  senkrechten Stichleitung direkt am Anschlusspunkt und – sofern beide
+  Enden an einem konkreten Port/Pin hängen – rechtwinklig dazwischen
+  (Stil klassischer Netzwerkplaner, leicht abgerundete Ecken statt
+  scharfer 90°-Kanten). Diese automatische Führung kennt nur die beiden
+  Anschlusspunkte, nicht die Position anderer Elemente dazwischen; in
+  seltenen Fällen (zwei Elemente direkt übereinander mit gleich
+  ausgerichteten Anschlüssen) kann eine Leitung dadurch knapp an einem
+  dritten Element vorbeilaufen. Abhilfe: Über den „⟳"-Button am Element
+  eine passendere Anschlussseite wählen, oder einen Wegpunkt setzen (siehe
+  unten).
 - **Leitungen umlegen:** Über „+ Wegpunkt hier" im Kontextmenü lassen sich
   frei verschiebbare Wegpunkte setzen, um die Leitung gezielt um andere
-  Elemente herumzuführen (weiche, fließende Kurve). Jeder Wegpunkt hat
+  Elemente herumzuführen (gerade Zwischenstrecke). Jeder Wegpunkt hat
   einen eigenen „✕"-Button zum Entfernen direkt daneben.
 - **Bezeichnung platzieren:** Eine gesetzte Bezeichnung lässt sich per
   Ziehen frei verschieben (mit gestrichelter Führungslinie zur Leitung,

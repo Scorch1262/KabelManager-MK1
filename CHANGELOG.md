@@ -2,6 +2,98 @@
 
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [3.2.0] – Neue Leitungsführung im "Netzwerkplaner"-Stil + Andock-Bugfix bei variabler Elementhöhe
+
+**Zwei vom Nutzer gemeldete Probleme behoben:** Leitungen dockten nicht
+immer exakt am Anschlusspunkt an, und die automatische Leitungsführung
+konnte bei bestimmten Konstellationen chaotisch wirken ("wirr durch die
+Gegend"). Beide Ursachen wurden gefunden und grundlegend behoben.
+
+### 1. Bugfix: Andockpunkt bei variabler Elementhöhe
+
+`.el-body` hat eine feste Breite (148px), aber **keine feste Höhe** – die
+wächst mit Inhalt (Standort-Zeile, IP-Anzeige, Schaltflächen). Mehrere
+Stellen im Code rechneten trotzdem pauschal mit einer festen Höhe von
+76px (`elementCenter()` für Verbindungen ohne konkreten Anschluss, sowie
+die individuelle Pin-Platzierung bei Platine/Raspberry Pi). Bei Elementen
+mit mehr Inhalt lag der angenommene Anschlusspunkt dadurch spürbar
+daneben.
+
+- Neue Funktion `measureElementSizes()`: misst nach jedem Rendern die
+  **tatsächliche** Größe jedes Elements (`offsetWidth`/`offsetHeight`)
+  und aktualisiert `elementCenter()` sowie die individuelle
+  Pin-Platzierung entsprechend. Ignoriert dabei unplausible 0×0-Messwerte
+  (Robustheit gegen Zwischenzustände).
+- Verifiziert durch gezielte Tests, die eine simulierte größere
+  Elementhöhe vorgeben und nachweisen, dass Mittelpunkt-Berechnung und
+  Pin-Position sich tatsächlich anpassen (7/7 Tests).
+
+### 2. Neue Leitungsführung: gerade Strecken statt organischer Kurve
+
+Bisher wurde jede Leitung als durchgehend weiche Bezier-Kurve
+(Catmull-Rom-artige Tangenten, Stil harness.design) gezeichnet. Das
+konnte bei bestimmten Winkel-Kombinationen zu Schleifen/"Verknotungen"
+führen, wenn die Kurve zunächst in Port-Richtung schoss, bevor sie sich
+zum Ziel zurückbog.
+
+**Neu:** gerade Streckenabschnitte mit einer kurzen, senkrechten
+"Stichleitung" direkt am Port/Pin (garantiert exaktes, rechtwinkliges
+Andocken) und – ohne manuelle Wegpunkte – vollautomatischer rechtwinkliger
+("orthogonaler") Verlauf dazwischen, wie in klassischen Netzwerkplan-/
+Schaltplan-Werkzeugen üblich. Ecken sind leicht abgerundet. Manuell
+gesetzte Wegpunkte bleiben als direkte, gerade Zwischenpunkte erhalten.
+
+Beim Umbau wurden **drei weitere, echte Geometrie-Bugs** gefunden und mit
+Regressionstests abgesichert:
+- Gleichgerichtete Anschlüsse auf derselben Achse (z. B. beide "unten")
+  erzeugten am Knickpunkt eine degenerierte 180°-Kehrtwende (sichtbarer
+  kleiner "Zacken"). Behoben: der Knick liegt jetzt beim weiter außen
+  liegenden Stub statt in der Mitte.
+- Bei unterschiedlich ausgerichteten Anschlüssen (z. B. ein Port zeigt
+  nach oben, der andere nach links) war die Achsen-Zuordnung der
+  Knick-Formel vertauscht, was je nach Lage des Ziels ebenfalls einen
+  Zacken direkt am Anschluss erzeugen konnte. Behoben durch eine
+  Knick-Formel, die die Austrittsrichtung des jeweiligen Ports garantiert
+  nie umkehrt.
+- Derselbe Formelfehler steckte auch in den beiden Einzel-Richtungs-Fällen
+  (nur Start- oder nur Zielport hat einen konkreten Anschluss) und wurde
+  dort ebenso behoben.
+- PDF-Export: die Bounding-Box fürs automatische Zuschneiden auf die
+  Seite kannte bisher nur Element- und Wegpunkt-Positionen, nicht die
+  neuen Stichleitungs-/Knickpunkte – dadurch konnten Leitungsbögen, die
+  seitlich über alle Elemente hinausragen, am Seitenrand abgeschnitten
+  werden. Behoben durch Einbeziehen der tatsächlich gerouteten Punkte.
+- Leitungsbezeichnungen (und Kabel-Bündel-Namen) nutzten einen festen
+  "8px nach oben"-Versatz zur Linie, der bei rein senkrechten
+  Leitungssegmenten (durch die neue Führung deutlich häufiger) keine
+  seitliche Verschiebung bewirkte – die Bezeichnung landete sichtbar auf
+  der Linie. Behoben durch einen Versatz senkrecht zur jeweiligen lokalen
+  Segmentrichtung, der bei jeder Orientierung zuverlässig seitlich
+  ausweicht.
+
+**Bekannte, dokumentierte Einschränkung:** Die automatische Führung kennt
+nur Start-/Endpunkt und deren Austrittsrichtung, nicht die Position
+*anderer* Elemente – es gibt bewusst (aus Aufwandsgründen) keine
+automatische Hindernis-Umgehung. In seltenen Fällen (zwei Elemente
+direkt übereinander/nebeneinander, beide Anschlüsse zeigen in dieselbe
+Richtung) kann die Leitung dadurch knapp an einem dritten Element
+vorbeilaufen. Abhilfe: „⟳"-Button zur passenderen Portausrichtung nutzen
+oder einen manuellen Wegpunkt setzen.
+
+**Weiterhin exakte Übereinstimmung von Webansicht und PDF-Export:** Die
+komplette neue Geometrie (`build_routed_points()`/
+`build_connector_path_segments()` in `app.py`) ist eine mathematisch
+exakte Python-Nachbildung von `buildRoutedPoints()`/`routedPointsToPath()`
+in `static/app.js` – numerisch auf mehrere Nachkommastellen identisch
+gegen 12 Testfälle abgeglichen (inkl. aller Sonderfälle: beide Ports,
+nur ein Port, kein Port, gleiche/unterschiedliche Achse, Wegpunkte).
+
+**Getestet:** 45 jsdom-Tests für die neue Routing-Geometrie (inkl. 9
+gezielter Regressionsfälle für die gefundenen Bugs), 7 Tests für den
+Höhen-Fix, numerischer JS/Python-Abgleich, sowie ausführliche visuelle
+PDF-Kontrolle (mehrere Iterationen mit Rasterung via PyMuPDF) anhand der
+Beispiel-`config.json`.
+
 ## [3.1.1] – Kritischer Bugfix: Verbindungen dockten bei individuell platzierten Pins am falschen Punkt an; Pins jetzt rotierbar
 
 1. **Bugfix (kritisch): Leitungen gingen bei Platine/Raspberry Pi nicht

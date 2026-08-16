@@ -308,6 +308,7 @@ let selectedColor = CONNECTION_COLORS[0];
 /* Relative Position jedes Ports innerhalb seines Elements (in Canvas-Pixeln,
    unabhaengig vom Zoom). Wird nach jedem Rendern der Elemente neu berechnet. */
 let portRelOffsets = {}; // { elementId: [{x,y}, ...] }
+let elementSizes = {}; // { elementId: {width, height} } – siehe measureElementSizes()
 
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
@@ -646,7 +647,51 @@ function renderElements() {
   for (const el of config.elements) {
     elementLayer.appendChild(buildElementNode(el));
   }
+  measureElementSizes();
   computePortRelOffsets();
+}
+
+/* Misst die TATSAECHLICH gerenderte Groesse jedes Elements (offsetWidth/
+   offsetHeight – layoutbasiert, unabhaengig vom CSS-Zoom-Transform auf dem
+   Viewport) und positioniert individuell platzierte Pins (Platine/
+   Raspberry Pi) danach neu.
+   WICHTIG: .el-body hat eine FESTE Breite (148px, siehe CSS), aber KEINE
+   feste Hoehe – die waechst mit Inhalt (Standort-Zeile, IP-Anzeige,
+   Schaltflaechen). Frueher wurde ueberall pauschal mit der festen
+   Konstante DEFAULT_ELEMENT_H (76) gerechnet (elementCenter() fuer
+   Verbindungen ohne konkreten Anschluss, sowie die individuelle
+   Pin-Platzierung) – bei Elementen mit mehr Inhalt (also einer groesseren
+   tatsaechlichen Hoehe) docken Leitungen dadurch spuerbar NICHT am
+   tatsaechlichen Anschlusspunkt an, sondern an einer mit 76px
+   angenommenen Position mitten im Element. Diese Funktion behebt das,
+   indem sie nach jedem Rendern die echte Hoehe je Element misst und
+   dafuer sorgt, dass elementCenter()/die Pin-Positionierung diese nutzen. */
+function measureElementSizes() {
+  elementLayer.querySelectorAll(".net-element").forEach((node) => {
+    // offsetWidth/offsetHeight sind 0, solange der Knoten (noch) nicht real
+    // layoutet wurde (z. B. sehr kurz waehrend eines Zwischenzustands) –
+    // ein unplausibler 0x0-Messwert wird ignoriert und der bisherige/
+    // Standard-Wert beibehalten, statt Pins/Verbindungen auf eine
+    // Nullgroesse zusammenschrumpfen zu lassen.
+    if (node.offsetWidth > 0 && node.offsetHeight > 0) {
+      elementSizes[node.dataset.id] = { width: node.offsetWidth, height: node.offsetHeight };
+    }
+  });
+  for (const el of config.elements) {
+    if (!hasIndividualPinPlacement(el.type)) continue;
+    if (getPortCount(el) === 0) continue;
+    const node = elementLayer.querySelector('.net-element[data-id="' + cssEscape(el.id) + '"]');
+    const layer = node && node.querySelector(".individual-pins-layer");
+    if (!layer) continue;
+    const size = elementSizes[el.id] || { width: DEFAULT_ELEMENT_W, height: DEFAULT_ELEMENT_H };
+    positionIndividualPinDots(el, layer, size.width, size.height);
+  }
+}
+
+/* Kleiner CSS.escape()-Ersatz (falls in aelteren Umgebungen nicht
+   verfuegbar) fuer Element-IDs im querySelector. */
+function cssEscape(id) {
+  return String(id).replace(/[^a-zA-Z0-9_-]/g, (c) => "\\" + c);
 }
 
 /* Erzeugt einen einzelnen Anschluss-Andockpunkt (Pin oder Port, je nach
@@ -714,48 +759,60 @@ function buildPortsBar(el, side, sideKey, axis, mirrored, portCount) {
    unten/links/rechts) zugewiesen werden, statt eines gemeinsamen Riegels
    fuer alle Anschluesse. Jeder Punkt wird direkt (ohne zusaetzliche
    positionierte Zwischen-Ebene) absolut innerhalb der Layer-Ebene
-   platziert – nach genau derselben Formel wie port_point() in app.py
-   (Marge 12px, gleichmaessige Verteilung je Seite), damit PDF-Export und
-   Webansicht pixelgenau uebereinstimmen. WICHTIG: computePortRelOffsets()
-   liest dot.offsetLeft/offsetTop relativ zum naechsten positionierten
-   Vorfahren – waere ein Pin-Punkt in einer eigenen position:absolute-
-   Zeile verschachtelt, ginge deren Eigen-Versatz (top/left der Zeile) bei
-   der Berechnung verloren und Verbindungen wuerden nicht am tatsaechlichen
-   Anschlusspunkt andocken. Layer ist daher die EINZIGE positionierte
-   Ebene zwischen Element und Punkt. */
+   platziert. Die genaue Position wird in positionIndividualPinDots()
+   berechnet (siehe dort) und nach dem ersten Rendern in
+   measureElementSizes() anhand der TATSAECHLICHEN Elementgroesse
+   korrigiert (das Element hat keine feste Hoehe, siehe Kommentar dort). */
 function buildIndividualPinsLayer(el, portCount) {
   const layer = document.createElement("div");
   layer.className = "individual-pins-layer";
-
-  const bySide = { top: [], bottom: [], left: [], right: [] };
   for (let i = 0; i < portCount; i++) {
-    bySide[getPinSide(el, i)].push(i);
+    const dot = createPinDot(el, i, "a", getPinSide(el, i));
+    dot.classList.add("individual-pin-dot");
+    layer.appendChild(dot);
   }
+  // Vorlaeufige Positionierung mit der Standardgroesse fuer den ersten
+  // Render-Durchlauf (bevor die echte Groesse gemessen werden kann, da das
+  // Element noch nicht im DOM haengt) – wird direkt im Anschluss von
+  // measureElementSizes() anhand der echten Groesse korrigiert.
+  positionIndividualPinDots(el, layer, DEFAULT_ELEMENT_W, DEFAULT_ELEMENT_H);
+  return layer;
+}
+
+/* Berechnet/aktualisiert die Position aller Pin-Punkte einer individuellen
+   Pin-Layer-Ebene, basierend auf der (tatsaechlichen oder vorlaeufigen)
+   Elementgroesse boxW x boxH. Muss exakt dieselbe Formel verwenden wie
+   port_point() in app.py (Marge 12px, gleichmaessige Verteilung je Seite),
+   damit PDF-Export und Webansicht uebereinstimmen. */
+function positionIndividualPinDots(el, layer, boxW, boxH) {
+  const portCount = getPortCount(el);
+  const bySide = { top: [], bottom: [], left: [], right: [] };
+  for (let i = 0; i < portCount; i++) bySide[getPinSide(el, i)].push(i);
 
   const margin = 12;
   const half = PORT_DOT / 2;
+  const dotByIndex = {};
+  layer.querySelectorAll(".port-dot").forEach((d) => { dotByIndex[d.dataset.port] = d; });
 
   for (const side of PORT_SIDES) {
     const indices = bySide[side];
     const n = indices.length;
     if (n === 0) continue;
     indices.forEach((pinIndex, posInSide) => {
-      const dot = createPinDot(el, pinIndex, "a", side);
-      dot.classList.add("individual-pin-dot");
+      const dot = dotByIndex[String(pinIndex)];
+      if (!dot) return;
       const frac = (posInSide + 0.5) / n;
       if (side === "bottom" || side === "top") {
-        const x = margin + frac * Math.max(DEFAULT_ELEMENT_W - 2 * margin, 1);
+        const x = margin + frac * Math.max(boxW - 2 * margin, 1);
         dot.style.left = (x - half) + "px";
-        dot.style.top = (side === "bottom" ? DEFAULT_ELEMENT_H - half : -half) + "px";
+        dot.style.top = (side === "bottom" ? boxH - half : -half) + "px";
       } else {
-        const y = margin + frac * Math.max(DEFAULT_ELEMENT_H - 2 * margin, 1);
+        const y = margin + frac * Math.max(boxH - 2 * margin, 1);
         dot.style.top = (y - half) + "px";
-        dot.style.left = (side === "right" ? DEFAULT_ELEMENT_W - half : -half) + "px";
+        dot.style.left = (side === "right" ? boxW - half : -half) + "px";
       }
-      layer.appendChild(dot);
     });
   }
-  return layer;
 }
 
 /* Rotiert bei individuell platzierten Pins (Platine/Raspberry Pi) ALLE
@@ -1936,7 +1993,14 @@ function renderConnections() {
     const dir1 = connectionDirection(fromEl, conn.from_port, conn.from_port_side);
     const dir2 = connectionDirection(toEl, conn.to_port, conn.to_port_side);
 
-    const path = buildSmoothPath([p1, ...conn.waypoints, p2], dir1, dir2);
+    // routedPoints = die TATSAECHLICH sichtbaren Eckpunkte der Leitung
+    // (inkl. Stichleitungen an Ports/Pins und ggf. automatischer
+    // rechtwinkliger Zwischenpunkte) – wird sowohl fuers Zeichnen als auch
+    // fuer Bezeichnung/Buttons/Kabel-Label verwendet, damit diese immer auf
+    // der tatsaechlich sichtbaren Linie sitzen (nicht auf einer gedachten
+    // Luftlinie zwischen den reinen Endpunkten).
+    const routedPoints = buildRoutedPoints([p1, ...conn.waypoints, p2], dir1, dir2);
+    const path = routedPointsToPath(routedPoints);
 
     const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
     group.style.pointerEvents = "auto";
@@ -1957,9 +2021,9 @@ function renderConnections() {
 
       if (cable.name && !labeledCableIds.has(cable.id)) {
         labeledCableIds.add(cable.id);
-        const points = [p1, ...conn.waypoints, p2];
-        const mid = pathMidpoint(points);
-        const labelPos = { x: mid.x, y: mid.y - 18 };
+        const mid = pathMidpoint(routedPoints);
+        const normal = pathMidpointNormal(routedPoints);
+        const labelPos = { x: mid.x + normal.x * 18, y: mid.y + normal.y * 18 };
         const cableLabel = document.createElementNS("http://www.w3.org/2000/svg", "text");
         cableLabel.setAttribute("x", labelPos.x);
         cableLabel.setAttribute("y", labelPos.y);
@@ -2012,16 +2076,17 @@ function renderConnections() {
     group.appendChild(visible);
 
     if (conn.label) {
-      const points = [p1, ...conn.waypoints, p2];
       const isCustomPos = !!conn.label_at;
+      const autoMid = pathMidpoint(routedPoints);
+      const autoNormal = pathMidpointNormal(routedPoints);
       const labelPos = isCustomPos
         ? conn.label_at
-        : { x: pathMidpoint(points).x, y: pathMidpoint(points).y - 8 };
+        : { x: autoMid.x + autoNormal.x * 8, y: autoMid.y + autoNormal.y * 8 };
 
       // Gestrichelte Fuehrungslinie, wenn die Bezeichnung weiter von der
       // Leitung weg platziert wurde, damit die Zuordnung erkennbar bleibt.
       if (isCustomPos) {
-        const anchor = closestPointOnPolyline(points, labelPos);
+        const anchor = closestPointOnPolyline(routedPoints, labelPos);
         if (Math.hypot(labelPos.x - anchor.x, labelPos.y - anchor.y) > 16) {
           const leader = document.createElementNS("http://www.w3.org/2000/svg", "line");
           leader.setAttribute("x1", anchor.x);
@@ -2058,8 +2123,7 @@ function renderConnections() {
        oeffnet zuverlaessig das Kontextmenue mit Name/Farbe/Wegpunkt/Entfernen,
        ganz ohne Doppelklick-Erkennung. */
     if (mode === "edit") {
-      const points = [p1, ...conn.waypoints, p2];
-      const mid = pathMidpoint(points);
+      const mid = pathMidpoint(routedPoints);
       const btnPos = { x: mid.x, y: mid.y + 16 };
 
       const editBtnGroup = document.createElementNS("http://www.w3.org/2000/svg", "g");
@@ -2173,58 +2237,209 @@ function connectionDirection(el, portIndex, portSide) {
    Dazwischenliegende Wegpunkte erhalten eine Catmull-Rom-aehnliche
    Tangente basierend auf ihren Nachbarpunkten fuer eine gleichmaessige,
    runde Linienfuehrung. */
-function buildSmoothPath(points, dir1, dir2) {
-  const n = points.length;
-  if (n < 2) return "";
-  if (n === 2 && !dir1 && !dir2) {
-    return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
+/* =========================================================================
+   Leitungsführung ("Netzwerkplaner"-Stil)
+   =========================================================================
+   Frühere Versionen nutzten eine durchgehend weiche Bezier-Kurve
+   (Catmull-Rom-artige Tangenten). Das sah bei harness.design-typischen
+   Formen gut aus, konnte bei bestimmten Winkel-Kombinationen aber zu
+   Schleifen/"Verknotungen" führen (die Kurve schoss zunächst in
+   Port-Richtung, bevor sie sich zurück zum Ziel bog) und band Leitungen
+   nicht immer sichtbar exakt an den Anschlusspunkt.
+   Jetzt: gerade Streckenabschnitte mit einer kurzen, senkrechten
+   "Stichleitung" direkt am Port/Pin (garantiert exaktes, rechtwinkliges
+   Andocken) und – wenn beide Enden eine Portrichtung haben und keine
+   manuellen Wegpunkte gesetzt sind – vollautomatischer rechtwinkliger
+   ("orthogonaler") Verlauf dazwischen, wie in klassischen
+   Netzwerkplan-/Schaltplan-Werkzeugen üblich. Ecken werden leicht
+   abgerundet, damit es nicht zu technisch-hart wirkt. Wegpunkte, die der
+   Nutzer manuell setzt, werden als direkte, gerade Zwischenpunkte
+   respektiert (keine erzwungene Rechtwinkligkeit dort, damit sich
+   Leitungen weiterhin frei um andere Elemente herumlegen lassen).
+
+   BEKANNTE EINSCHRAENKUNG: Diese Routing-Funktion kennt nur die beiden
+   Endpunkte + deren Austrittsrichtung, nicht die Positionen/Ausmaße
+   ANDERER Elemente – es gibt (bewusst, aus Aufwandsgruenden) KEINE
+   automatische Hindernis-Umgehung. In seltenen Faellen (typischerweise:
+   zwei direkt uebereinander/nebeneinander liegende Elemente, deren Ports
+   BEIDE in dieselbe Richtung zeigen, sodass die Leitung zwingend am
+   dazwischenliegenden Element vorbei muesste) kann die automatische Route
+   dadurch optisch durch ein drittes Element hindurchlaufen. Abhilfe: am
+   betroffenen Element den "⟳"-Button nutzen, um die Portseite passender
+   auszurichten (meist behebt das den Fall vollstaendig, siehe Beispiel in
+   config.json: Relais-Eingang zeigt bewusst nach "top", da er von oben
+   gespeist wird), oder alternativ einen manuellen Wegpunkt setzen, um die
+   Leitung gezielt vorbeizufuehren.
+
+   WICHTIG: Diese Funktionen MÜSSEN mit ihrem Python-Gegenstück
+   (build_routed_points()/build_connector_path_segments() in app.py)
+   mathematisch exakt übereinstimmen, damit der PDF-Export exakt dieselbe
+   Leitungsführung zeigt wie die Webansicht. */
+
+const CONN_STUB = 26;   // px, Laenge der senkrechten Stichleitung am Port/Pin
+const CONN_CORNER_R = 10; // px, Eckenradius an Knickpunkten
+
+function vecAdd(a, b) { return { x: a.x + b.x, y: a.y + b.y }; }
+function vecSub(a, b) { return { x: a.x - b.x, y: a.y - b.y }; }
+function vecLen(v) { return Math.hypot(v.x, v.y); }
+function vecNorm(v) { const l = vecLen(v) || 1; return { x: v.x / l, y: v.y / l }; }
+function pointsEqual(a, b) { return Math.abs(a.x - b.x) < 0.01 && Math.abs(a.y - b.y) < 0.01; }
+
+/* Berechnet die Liste der Eckpunkte (inkl. Stichleitungen an Ports/Pins und
+   ggf. automatischer rechtwinkliger Zwischenpunkte), OHNE Rundung – reine
+   Geometrie. points = [p1, ...wegpunkte, p2]. */
+function buildRoutedPoints(points, dir1, dir2) {
+  const p1 = points[0];
+  const p2 = points[points.length - 1];
+  const hasWaypoints = points.length > 2;
+  const directDist = vecLen(vecSub(p2, p1));
+  // Stichleitung nie laenger als ein Drittel der direkten Distanz, damit sie
+  // bei sehr nah beieinander liegenden Elementen nicht ueber das Ziel hinausschiesst.
+  const stubLen = Math.max(4, Math.min(CONN_STUB, directDist / 3 || CONN_STUB));
+
+  const stub1 = dir1 ? vecAdd(p1, { x: dir1.x * stubLen, y: dir1.y * stubLen }) : null;
+  const stub2 = dir2 ? vecAdd(p2, { x: dir2.x * stubLen, y: dir2.y * stubLen }) : null;
+
+  let routed;
+
+  if (hasWaypoints) {
+    // Manuell gesetzte Wegpunkte: direkte, gerade Zwischenstrecke – nur an
+    // den beiden Enden (Port/Pin) wird eine Stichleitung eingefuegt.
+    routed = [p1];
+    if (stub1) routed.push(stub1);
+    for (let i = 1; i < points.length - 1; i++) routed.push(points[i]);
+    if (stub2) routed.push(stub2);
+    routed.push(p2);
+  } else if (stub1 && stub2) {
+    // Beide Enden haben eine Portrichtung -> vollautomatischer
+    // rechtwinkliger Verlauf zwischen den beiden Stichleitungen.
+    const axis1 = Math.abs(dir1.x) > Math.abs(dir1.y) ? "h" : "v";
+    const axis2 = Math.abs(dir2.x) > Math.abs(dir2.y) ? "h" : "v";
+    if (axis1 !== axis2) {
+      // Der Knick MUSS die Achsen-Koordinate von stub1 (die durch dir1
+      // bereits "verlassene" Achse) beibehalten und nur auf der jeweils
+      // ANDEREN (zu dir1 senkrechten) Achse zu stub2 hin springen – sonst
+      // wuerde Segment 2 (stub1 -> Knick) auf derselben Achse wie Segment 1
+      // weiterlaufen und je nach Lage von stub2 die gerade erst
+      // eingeschlagene Austrittsrichtung von p1 wieder umkehren muessen
+      // (sichtbar als kleiner, hakenartiger Zacken direkt am Anschluss).
+      const bend = axis1 === "h" ? { x: stub1.x, y: stub2.y } : { x: stub2.x, y: stub1.y };
+      routed = [p1, stub1, bend, stub2, p2];
+    } else if (dir1.x * dir2.x + dir1.y * dir2.y < 0) {
+      // Gegenueberliegende Richtungen auf derselben Achse (Ports zeigen
+      // aufeinander zu, z. B. links<->rechts) -> Knick auf halber Strecke.
+      if (axis1 === "h") {
+        const midX = (stub1.x + stub2.x) / 2;
+        routed = [p1, stub1, { x: midX, y: stub1.y }, { x: midX, y: stub2.y }, stub2, p2];
+      } else {
+        const midY = (stub1.y + stub2.y) / 2;
+        routed = [p1, stub1, { x: stub1.x, y: midY }, { x: stub2.x, y: midY }, stub2, p2];
+      }
+    } else {
+      // Gleiche Richtung auf derselben Achse (beide Ports zeigen z. B. nach
+      // unten) -> Knick auf Hoehe des am WEITESTEN aussen liegenden Stubs,
+      // NICHT auf der Mitte: sonst muesste eine der beiden Stichleitungen
+      // ihre eigene Austrittsrichtung umkehren, was zu einem degenerierten
+      // 180°-Reversal (sichtbarer kleiner "Zacken"/Spitze an der Ecke)
+      // fuehrt, statt eines sauberen 90°-Knicks.
+      if (axis1 === "h") {
+        const jogX = dir1.x > 0 ? Math.max(stub1.x, stub2.x) : Math.min(stub1.x, stub2.x);
+        routed = [p1, stub1, { x: jogX, y: stub1.y }, { x: jogX, y: stub2.y }, stub2, p2];
+      } else {
+        const jogY = dir1.y > 0 ? Math.max(stub1.y, stub2.y) : Math.min(stub1.y, stub2.y);
+        routed = [p1, stub1, { x: stub1.x, y: jogY }, { x: stub2.x, y: jogY }, stub2, p2];
+      }
+    }
+  } else if (stub1) {
+    // Nur der Startpunkt hat eine Portrichtung (Ziel ist z. B. ein
+    // Element ohne Ports/Pins) -> Stichleitung + ein rechtwinkliger Knick.
+    // Der Knick behaelt stub1s Koordinate auf der dir1-Achse bei und
+    // springt nur auf der dazu SENKRECHTEN Achse zu p2 (gleiche
+    // Begruendung wie beim Zwei-Ports-Fall oben: sonst wuerde das naechste
+    // Segment dieselbe Achse wie die Austrittsrichtung weiterverfolgen und
+    // je nach Lage von p2 einen Zacken/Reversal direkt am Anschluss
+    // erzeugen).
+    const axis1 = Math.abs(dir1.x) > Math.abs(dir1.y) ? "h" : "v";
+    const bend = axis1 === "h" ? { x: stub1.x, y: p2.y } : { x: p2.x, y: stub1.y };
+    routed = [p1, stub1, bend, p2];
+  } else if (stub2) {
+    // Symmetrischer Fall: nur der Zielpunkt hat eine Portrichtung. Damit
+    // das LETZTE Segment (stub2 -> p2, zwingend entlang dir2) nicht
+    // gegenueber dem vorletzten Segment umkehren muss, behaelt der Knick
+    // stub2s eigene Koordinate auf der dir2-Achse bei und springt nur auf
+    // der dazu senkrechten Achse zu p1.
+    const axis2 = Math.abs(dir2.x) > Math.abs(dir2.y) ? "h" : "v";
+    const bend = axis2 === "h" ? { x: stub2.x, y: p1.y } : { x: p1.x, y: stub2.y };
+    routed = [p1, bend, stub2, p2];
+  } else {
+    // Keine Portrichtung auf beiden Seiten (z. B. zwei Elemente ohne
+    // Ports/Pins) -> einfache direkte Linie.
+    routed = [p1, p2];
   }
 
-  const segLen = (a, b) => {
-    const d = Math.hypot(b.x - a.x, b.y - a.y);
-    return Math.max(40, Math.min(160, d * 0.5));
-  };
-  const normalize = (v) => {
-    const len = Math.hypot(v.x, v.y) || 1;
-    return { x: v.x / len, y: v.y / len };
-  };
-
-  let d = `M ${points[0].x} ${points[0].y} `;
-
-  for (let i = 0; i < n - 1; i++) {
-    const p0 = points[i], p1 = points[i + 1];
-    const len = segLen(p0, p1);
-
-    let cpA;
-    if (i === 0 && dir1) {
-      cpA = { x: p0.x + dir1.x * len, y: p0.y + dir1.y * len };
-    } else {
-      const prev = points[i - 1] || p0;
-      const next = points[i + 1];
-      const t = normalize({ x: next.x - prev.x, y: next.y - prev.y });
-      cpA = { x: p0.x + t.x * (len / 2.2), y: p0.y + t.y * (len / 2.2) };
-    }
-
-    let cpB;
-    if (i + 1 === n - 1 && dir2) {
-      cpB = { x: p1.x + dir2.x * len, y: p1.y + dir2.y * len };
-    } else {
-      const prevOfNext = points[i];
-      const nextOfNext = points[i + 2] !== undefined ? points[i + 2] : p1;
-      const t = normalize({ x: nextOfNext.x - prevOfNext.x, y: nextOfNext.y - prevOfNext.y });
-      cpB = { x: p1.x - t.x * (len / 2.2), y: p1.y - t.y * (len / 2.2) };
-    }
-
-    d += `C ${cpA.x} ${cpA.y}, ${cpB.x} ${cpB.y}, ${p1.x} ${p1.y} `;
+  // Aufeinanderfolgende, praktisch identische Punkte entfernen (z. B. wenn
+  // die Stichleitung mit dem Zielpunkt zusammenfaellt).
+  const deduped = [routed[0]];
+  for (let i = 1; i < routed.length; i++) {
+    if (!pointsEqual(routed[i], deduped[deduped.length - 1])) deduped.push(routed[i]);
   }
+  return deduped;
+}
 
+/* Wandelt eine Eckpunkt-Liste in einen SVG-Pfad mit leicht abgerundeten
+   Ecken um (gerade Strecken, keine Bezier-Ueberschwinger/Schleifen). */
+function routedPointsToPath(routed) {
+  if (routed.length < 2) return "";
+  if (routed.length === 2) {
+    return `M ${routed[0].x} ${routed[0].y} L ${routed[1].x} ${routed[1].y}`;
+  }
+  let d = `M ${routed[0].x} ${routed[0].y} `;
+  for (let i = 1; i < routed.length - 1; i++) {
+    const a = routed[i - 1], b = routed[i], c = routed[i + 1];
+    const inLen = vecLen(vecSub(b, a));
+    const outLen = vecLen(vecSub(c, b));
+    const r = Math.min(CONN_CORNER_R, inLen / 2, outLen / 2);
+    const dirIn = vecNorm(vecSub(b, a));
+    const dirOut = vecNorm(vecSub(c, b));
+    const pIn = vecSub(b, { x: dirIn.x * r, y: dirIn.y * r });
+    const pOut = vecAdd(b, { x: dirOut.x * r, y: dirOut.y * r });
+    d += `L ${pIn.x} ${pIn.y} Q ${b.x} ${b.y}, ${pOut.x} ${pOut.y} `;
+  }
+  const last = routed[routed.length - 1];
+  d += `L ${last.x} ${last.y}`;
   return d;
+}
+
+/* Baut den vollstaendigen SVG-Pfad ("d"-Attribut) fuer eine
+   Verbindungsleitung. points = [p1, ...wegpunkte, p2]; dir1/dir2 = optionale
+   Austrittsrichtung an einem konkreten Port/Pin (siehe connectionDirection). */
+function buildSmoothPath(points, dir1, dir2) {
+  return routedPointsToPath(buildRoutedPoints(points, dir1, dir2));
 }
 
 function pathMidpoint(points) {
   const mid = Math.floor((points.length - 1) / 2);
   const a = points[mid], b = points[Math.min(mid + 1, points.length - 1)];
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+}
+
+/* Einheitsvektor senkrecht zur lokalen Segmentrichtung an pathMidpoint().
+   Wird genutzt, um Bezeichnungen/Kabel-Labels seitlich NEBEN statt AUF der
+   Leitung zu platzieren. Ein fester "-8 in Y"-Versatz (wie frueher) sitzt
+   bei rein senkrechten Leitungssegmenten – durch die orthogonale
+   Routenfuehrung inzwischen haeufig – direkt AUF der Linie, weil "-8 in Y"
+   bei einer senkrechten Linie keine seitliche Verschiebung bewirkt. Der
+   senkrechte Versatz funktioniert dagegen unabhaengig von der
+   Segmentausrichtung immer zuverlaessig seitlich. */
+function pathMidpointNormal(points) {
+  const mid = Math.floor((points.length - 1) / 2);
+  const a = points[mid], b = points[Math.min(mid + 1, points.length - 1)];
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy) || 1;
+  // 90°-Rotation der Segmentrichtung; Vorzeichen so gewaehlt, dass eine
+  // horizontale, nach rechts laufende Leitung (der bisherige Hauptfall)
+  // weiterhin wie zuvor nach OBEN (negatives Y) versetzt wird.
+  return { x: dy / len, y: -dx / len };
 }
 
 function distToSegment(p, a, b) {
@@ -2457,8 +2672,16 @@ function applyPortColor(elId, portIndex, portSide, color) {
   dot.style.color = "#0a0e14";
 }
 
+/* Liefert die tatsaechlich gerenderte Groesse eines Elements (siehe
+   measureElementSizes()) – Fallback auf die Standardgroesse, solange noch
+   nicht gemessen wurde (z. B. vor dem allerersten Render). */
+function getElementSize(el) {
+  return elementSizes[el.id] || { width: DEFAULT_ELEMENT_W, height: DEFAULT_ELEMENT_H };
+}
+
 function elementCenter(el) {
-  return { x: el.x + DEFAULT_ELEMENT_W / 2, y: el.y + DEFAULT_ELEMENT_H / 2 };
+  const size = getElementSize(el);
+  return { x: el.x + size.width / 2, y: el.y + size.height / 2 };
 }
 
 /* Liefert den Andockpunkt einer Verbindung: bei Switch/Router/Patchfeld den
@@ -2472,8 +2695,10 @@ function connectionEndpoint(el, portIndex, portSide) {
   return elementCenter(el);
 }
 
-/* Geschwungene, dicke Verbindungslinien im Stil von harness.design –
-   siehe buildSmoothPath() weiter oben fuer das eigentliche Routing. */
+/* Dicke, farbige Verbindungslinien im "Netzwerkplaner"-Stil (gerade
+   Strecken, rechtwinklige Verlaeufe, saubere Andockung an Ports/Pins) –
+   siehe buildSmoothPath()/buildRoutedPoints() weiter oben fuer das
+   eigentliche Routing. */
 
 /* ------------------------------------------------------------------ */
 /* Kabel-Buendel: mehrere Verbindungen zu einem gemeinsamen "Kabel"     */

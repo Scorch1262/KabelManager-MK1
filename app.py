@@ -466,49 +466,134 @@ def _normalize(vx, vy):
     return vx / length, vy / length
 
 
-def _seg_len(p0, p1):
-    d = math.hypot(p1[0] - p0[0], p1[1] - p0[1])
-    return max(40.0, min(160.0, d * 0.5))
+CONN_STUB = 26.0     # px, Laenge der senkrechten Stichleitung am Port/Pin
+CONN_CORNER_R = 10.0  # px, Eckenradius an Knickpunkten
 
 
-def build_smooth_path_segments(points, dir1, dir2):
-    """Python-Nachbildung von buildSmoothPath() in static/app.js - MUSS mit
-    dessen Mathematik exakt uebereinstimmen, damit die PDF-Leitungen an
-    exakt derselben Stelle verlaufen wie in der Webansicht (gleiche
-    Bezier-Kontrollpunkt-Berechnung inkl. Catmull-Rom-aehnlicher Tangenten
-    an Wegpunkten und Anti-Verknoten-Austrittsrichtung an Ports/Pins).
-    Gibt entweder [("line", p0, p1)] fuer die Sonderfall-Gerade (2 Punkte,
-    keine Portrichtung) oder eine Liste von ("curve", p0, cpA, cpB, p1)
-    Segmenten zurueck, jeweils in Canvas-Koordinaten (vor Seiten-Transform)."""
-    n = len(points)
-    if n < 2:
+def _points_equal(a, b):
+    return abs(a[0] - b[0]) < 0.01 and abs(a[1] - b[1]) < 0.01
+
+
+def _path_midpoint_normal(a, b):
+    """Python-Aequivalent zu pathMidpointNormal() in static/app.js: Einheits-
+    vektor senkrecht zur lokalen Segmentrichtung, damit Bezeichnungen auch
+    bei rein senkrechten Leitungssegmenten (durch die orthogonale
+    Routenfuehrung haeufig) seitlich NEBEN statt AUF der Linie sitzen."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length = math.hypot(dx, dy) or 1.0
+    return (dy / length, -dx / length)
+
+
+def build_routed_points(points, dir1, dir2):
+    """Python-Nachbildung von buildRoutedPoints() in static/app.js - MUSS
+    mit dessen Geometrie exakt uebereinstimmen, damit die PDF-Leitungen an
+    exakt derselben Stelle und mit derselben Form verlaufen wie die
+    Webansicht (gerade Streckenabschnitte, senkrechte Stichleitung an
+    Ports/Pins, automatischer rechtwinkliger Verlauf dazwischen). points =
+    [p1, ...wegpunkte, p2] (Tupel (x,y)). Gibt eine Liste von (x,y)-
+    Eckpunkten zurueck (noch ohne Eckenrundung).
+    Bekannte Einschraenkung (siehe ausfuehrlicher Kommentar bei
+    buildRoutedPoints() in static/app.js): keine automatische Hindernis-
+    Umgehung anderer Elemente."""
+    p1, p2 = points[0], points[-1]
+    has_waypoints = len(points) > 2
+    direct_dist = math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+    stub_len = max(4.0, min(CONN_STUB, (direct_dist / 3.0) if direct_dist else CONN_STUB))
+
+    stub1 = (p1[0] + dir1[0] * stub_len, p1[1] + dir1[1] * stub_len) if dir1 else None
+    stub2 = (p2[0] + dir2[0] * stub_len, p2[1] + dir2[1] * stub_len) if dir2 else None
+
+    if has_waypoints:
+        routed = [p1]
+        if stub1:
+            routed.append(stub1)
+        routed.extend(points[1:-1])
+        if stub2:
+            routed.append(stub2)
+        routed.append(p2)
+    elif stub1 and stub2:
+        axis1 = "h" if abs(dir1[0]) > abs(dir1[1]) else "v"
+        axis2 = "h" if abs(dir2[0]) > abs(dir2[1]) else "v"
+        if axis1 != axis2:
+            # Siehe ausfuehrliche Begruendung bei buildRoutedPoints() in
+            # static/app.js: Knick behaelt stub1s Koordinate auf der
+            # dir1-Achse bei, springt nur auf der SENKRECHTEN Achse zu
+            # stub2 - sonst drohte ein Reversal/Zacken direkt am Anschluss.
+            bend = (stub1[0], stub2[1]) if axis1 == "h" else (stub2[0], stub1[1])
+            routed = [p1, stub1, bend, stub2, p2]
+        elif dir1[0] * dir2[0] + dir1[1] * dir2[1] < 0:
+            # Gegenueberliegende Richtungen (Ports zeigen aufeinander zu) -> Knick auf halber Strecke.
+            if axis1 == "h":
+                mid_x = (stub1[0] + stub2[0]) / 2
+                routed = [p1, stub1, (mid_x, stub1[1]), (mid_x, stub2[1]), stub2, p2]
+            else:
+                mid_y = (stub1[1] + stub2[1]) / 2
+                routed = [p1, stub1, (stub1[0], mid_y), (stub2[0], mid_y), stub2, p2]
+        else:
+            # Gleiche Richtung auf derselben Achse -> Knick beim weiter aussen
+            # liegenden Stub (nicht der Mitte), sonst degeneriertes 180°-Reversal.
+            if axis1 == "h":
+                jog_x = max(stub1[0], stub2[0]) if dir1[0] > 0 else min(stub1[0], stub2[0])
+                routed = [p1, stub1, (jog_x, stub1[1]), (jog_x, stub2[1]), stub2, p2]
+            else:
+                jog_y = max(stub1[1], stub2[1]) if dir1[1] > 0 else min(stub1[1], stub2[1])
+                routed = [p1, stub1, (stub1[0], jog_y), (stub2[0], jog_y), stub2, p2]
+    elif stub1:
+        # Siehe buildRoutedPoints() in static/app.js: Knick behaelt stub1s
+        # Koordinate auf der dir1-Achse bei, springt nur senkrecht zu p2.
+        axis1 = "h" if abs(dir1[0]) > abs(dir1[1]) else "v"
+        bend = (stub1[0], p2[1]) if axis1 == "h" else (p2[0], stub1[1])
+        routed = [p1, stub1, bend, p2]
+    elif stub2:
+        axis2 = "h" if abs(dir2[0]) > abs(dir2[1]) else "v"
+        bend = (stub2[0], p1[1]) if axis2 == "h" else (p1[0], stub2[1])
+        routed = [p1, bend, stub2, p2]
+    else:
+        routed = [p1, p2]
+
+    deduped = [routed[0]]
+    for pt in routed[1:]:
+        if not _points_equal(pt, deduped[-1]):
+            deduped.append(pt)
+    return deduped
+
+
+def build_connector_path_segments(points, dir1, dir2):
+    """Python-Nachbildung von routedPointsToPath() - wandelt die Eckpunkte
+    aus build_routed_points() in Zeichensegmente um (gerade Strecken,
+    leicht abgerundete Ecken), im selben Format wie zuvor
+    build_smooth_path_segments(): [("line",p0,p1)] fuer eine einzelne
+    Gerade, sonst eine Liste aus ("line", p0, p1) und ("curve", p0, cpA,
+    cpB, p1) Segmenten (Rundungen als quadratische, zu kubischen Bezier
+    konvertierte Kurven – reportlab kennt kein natives "Q")."""
+    routed = build_routed_points(points, dir1, dir2)
+    if len(routed) < 2:
         return []
-    if n == 2 and not dir1 and not dir2:
-        return [("line", points[0], points[1])]
+    if len(routed) == 2:
+        return [("line", routed[0], routed[1])]
 
     segments = []
-    for i in range(n - 1):
-        p0, p1 = points[i], points[i + 1]
-        seg_len = _seg_len(p0, p1)
-
-        if i == 0 and dir1:
-            cp_a = (p0[0] + dir1[0] * seg_len, p0[1] + dir1[1] * seg_len)
-        else:
-            prev = points[i - 1] if i - 1 >= 0 else p0
-            nxt = points[i + 1]
-            tx, ty = _normalize(nxt[0] - prev[0], nxt[1] - prev[1])
-            cp_a = (p0[0] + tx * (seg_len / 2.2), p0[1] + ty * (seg_len / 2.2))
-
-        if i + 1 == n - 1 and dir2:
-            cp_b = (p1[0] + dir2[0] * seg_len, p1[1] + dir2[1] * seg_len)
-        else:
-            prev_of_next = points[i]
-            next_of_next = points[i + 2] if i + 2 < n else p1
-            tx, ty = _normalize(next_of_next[0] - prev_of_next[0], next_of_next[1] - prev_of_next[1])
-            cp_b = (p1[0] - tx * (seg_len / 2.2), p1[1] - ty * (seg_len / 2.2))
-
-        segments.append(("curve", p0, cp_a, cp_b, p1))
-
+    cursor = routed[0]
+    for i in range(1, len(routed) - 1):
+        a, b, c = routed[i - 1], routed[i], routed[i + 1]
+        in_len = math.hypot(b[0] - a[0], b[1] - a[1])
+        out_len = math.hypot(c[0] - b[0], c[1] - b[1])
+        r = min(CONN_CORNER_R, in_len / 2.0, out_len / 2.0)
+        in_dx, in_dy = _normalize(b[0] - a[0], b[1] - a[1])
+        out_dx, out_dy = _normalize(c[0] - b[0], c[1] - b[1])
+        p_in = (b[0] - in_dx * r, b[1] - in_dy * r)
+        p_out = (b[0] + out_dx * r, b[1] + out_dy * r)
+        if not _points_equal(cursor, p_in):
+            segments.append(("line", cursor, p_in))
+        # Quadratische Bezier (SVG "Q", Kontrollpunkt b) als kubische Bezier
+        # fuer reportlab: cp1 = p_in + 2/3*(b-p_in), cp2 = p_out + 2/3*(b-p_out).
+        cp1 = (p_in[0] + 2.0 / 3.0 * (b[0] - p_in[0]), p_in[1] + 2.0 / 3.0 * (b[1] - p_in[1]))
+        cp2 = (p_out[0] + 2.0 / 3.0 * (b[0] - p_out[0]), p_out[1] + 2.0 / 3.0 * (b[1] - p_out[1]))
+        segments.append(("curve", p_in, cp1, cp2, p_out))
+        cursor = p_out
+    last = routed[-1]
+    if not _points_equal(cursor, last):
+        segments.append(("line", cursor, last))
     return segments
 
 
@@ -551,9 +636,14 @@ def build_pdf(cfg, theme_name):
         c.save()
         return buf.getvalue()
 
-    # Bounding Box aller Elemente (inkl. Wegpunkte, damit Leitungen nicht
-    # abgeschnitten werden) ermitteln, um den Plan passend auf die Seite
-    # (Querformat) zu skalieren.
+    # Bounding Box aller Elemente UND der tatsaechlich gerouteten
+    # Verbindungspunkte (inkl. Stichleitungen/automatischer Knickpunkte,
+    # nicht nur der rohen Element-/Wegpunkt-Koordinaten!) ermitteln, um den
+    # Plan passend auf die Seite (Querformat) zu skalieren. Ohne die
+    # gerouteten Punkte koennen Stichleitungen/Knicke, die ueber die reinen
+    # Element-/Wegpunkt-Positionen hinausragen, am Seitenrand abgeschnitten
+    # werden (z. B. wenn eine Leitung seitlich neben allen Elementen einen
+    # Bogen macht).
     xs, ys = [], []
     for el in elements:
         x = el.get("x", 0) or 0
@@ -565,9 +655,31 @@ def build_pdf(cfg, theme_name):
             if isinstance(wp, dict) and "x" in wp and "y" in wp:
                 xs.append(wp["x"])
                 ys.append(wp["y"])
+        f = el_by_id.get(conn.get("from"))
+        t = el_by_id.get(conn.get("to"))
+        if not f or not t:
+            continue
+        p1 = connection_endpoint(f, conn.get("from_port"), conn.get("from_port_side"))
+        p2 = connection_endpoint(t, conn.get("to_port"), conn.get("to_port_side"))
+        dir1 = connection_direction(f, conn.get("from_port"), conn.get("from_port_side"))
+        dir2 = connection_direction(t, conn.get("to_port"), conn.get("to_port_side"))
+        waypoints = [(wp["x"], wp["y"]) for wp in (conn.get("waypoints") or [])
+                     if isinstance(wp, dict) and "x" in wp and "y" in wp]
+        for rx, ry in build_routed_points([p1] + waypoints + [p2], dir1, dir2):
+            xs.append(rx)
+            ys.append(ry)
 
     bbox_x0, bbox_x1 = min(xs), max(xs)
     bbox_y0, bbox_y1 = min(ys), max(ys)
+    # Kleiner Sicherheitsabstand rundum, damit Leitungsbezeichnungen an den
+    # aeussersten Punkten (die per drawCentredString auch nach links/oben
+    # ueber ihren Ankerpunkt hinausragen koennen) nicht am Seitenrand
+    # abgeschnitten werden.
+    label_margin = 34
+    bbox_x0 -= label_margin
+    bbox_x1 += label_margin
+    bbox_y0 -= label_margin
+    bbox_y1 += label_margin
     bbox_w = max(bbox_x1 - bbox_x0, 1)
     bbox_h = max(bbox_y1 - bbox_y0, 1)
 
@@ -583,9 +695,10 @@ def build_pdf(cfg, theme_name):
                 off_y + (bbox_y1 - py) * scale)
 
     # --- Verbindungen zeichnen (unter den Elementen) ---
-    # Jede Leitung folgt exakt derselben Bezier-Kurven-Berechnung wie die
-    # Webansicht (siehe build_smooth_path_segments/buildSmoothPath), statt
-    # nur die gleichen Punkte gerade zu verbinden.
+    # Jede Leitung folgt exakt derselben Geometrie wie die Webansicht
+    # (siehe build_routed_points()/buildRoutedPoints in static/app.js):
+    # gerade Streckenabschnitte mit senkrechter Stichleitung an Ports/Pins
+    # und automatischem rechtwinkligem Verlauf dazwischen.
     c.setLineJoin(1)
     c.setLineCap(1)
 
@@ -612,7 +725,7 @@ def build_pdf(cfg, theme_name):
         waypoints = [(wp["x"], wp["y"]) for wp in (conn.get("waypoints") or [])
                      if isinstance(wp, dict) and "x" in wp and "y" in wp]
         points = [p1] + waypoints + [p2]
-        return build_smooth_path_segments(points, dir1, dir2)
+        return build_connector_path_segments(points, dir1, dir2)
 
     def draw_canvas_path(segments, color_hex, width_pt):
         if not segments:
@@ -672,8 +785,8 @@ def build_pdf(cfg, theme_name):
                 mid_i = (len(canvas_points) - 1) // 2
                 a = canvas_points[mid_i]
                 b = canvas_points[min(mid_i + 1, len(canvas_points) - 1)]
-                # -8 in Canvas-Y (waechst nach unten) = optisch "nach oben".
-                label_point = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 8)
+                nx, ny = _path_midpoint_normal(a, b)
+                label_point = ((a[0] + b[0]) / 2 + nx * 8, (a[1] + b[1]) / 2 + ny * 8)
             lx, ly = to_page(*label_point)
             c.setFont("Helvetica", 7.5)
             c.setFillColor(HexColor(theme["text_dim"]))
@@ -692,7 +805,8 @@ def build_pdf(cfg, theme_name):
         mid_i = (len(canvas_points) - 1) // 2
         a = canvas_points[mid_i]
         b = canvas_points[min(mid_i + 1, len(canvas_points) - 1)]
-        mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 8)
+        nx, ny = _path_midpoint_normal(a, b)
+        mid = ((a[0] + b[0]) / 2 + nx * 18, (a[1] + b[1]) / 2 + ny * 18)
         lx, ly = to_page(*mid)
         c.setFont("Helvetica-Bold", 7.5)
         c.setFillColor(HexColor(theme["text"]))

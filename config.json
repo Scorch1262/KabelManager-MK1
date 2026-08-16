@@ -22,7 +22,10 @@
       "x": 80,
       "y": 100,
       "ports": 2,
-      "port_names": ["+", "-"],
+      "port_names": [
+        "+",
+        "-"
+      ],
       "links": []
     },
     {
@@ -57,9 +60,15 @@
       "y": 300,
       "relay_type": "wechsler",
       "ports": 5,
-      "port_side": "bottom",
+      "port_side": "top",
       "port_mirror": false,
-      "port_names": ["Spule A1", "Spule A2", "gemeinsam (11)", "Öffner (12)", "Schließer (14)"],
+      "port_names": [
+        "Spule A1",
+        "Spule A2",
+        "gemeinsam (11)",
+        "Öffner (12)",
+        "Schließer (14)"
+      ],
       "links": []
     },
     {
@@ -73,7 +82,12 @@
       "ports": 4,
       "port_side": "left",
       "port_mirror": false,
-      "port_names": ["A+", "A-", "B+", "B-"],
+      "port_names": [
+        "A+",
+        "A-",
+        "B+",
+        "B-"
+      ],
       "links": []
     },
     {
@@ -84,8 +98,18 @@
       "x": 80,
       "y": 340,
       "ports": 4,
-      "port_names": ["VCC", "GND", "SDA", "SCL"],
-      "pin_sides": ["top", "bottom", "left", "right"],
+      "port_names": [
+        "VCC",
+        "GND",
+        "SDA",
+        "SCL"
+      ],
+      "pin_sides": [
+        "top",
+        "bottom",
+        "left",
+        "right"
+      ],
       "links": []
     },
     {
@@ -96,9 +120,21 @@
       "x": 400,
       "y": 480,
       "ports": 3,
-      "port_names": ["GPIO17 (I2C SDA)", "", ""],
-      "pin_sides": ["bottom", "right", "right"],
-      "pin_kinds": ["pin", "usb", "lan"],
+      "port_names": [
+        "GPIO17 (I2C SDA)",
+        "",
+        ""
+      ],
+      "pin_sides": [
+        "bottom",
+        "right",
+        "right"
+      ],
+      "pin_kinds": [
+        "pin",
+        "usb",
+        "lan"
+      ],
       "links": [
         {
           "label": "SSH",
