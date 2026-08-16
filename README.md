@@ -1,7 +1,6 @@
 # Verkabelungsplan
 
-
-![Bild](Bild.PNG)
+![Bild](Unbenannt.PNG)
 
 **Aktuelle Version: 3.1.0** – siehe [CHANGELOG.md](CHANGELOG.md) für alle
 Änderungen.
