@@ -2,6 +2,46 @@
 
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [3.2.1] – Leitungsführung zurück auf die ursprüngliche, bewährte Bezier-Kurve
+
+Die in 3.2.0 eingeführte rechtwinklige ("orthogonale") Leitungsführung
+wurde auf ausdrücklichen Wunsch wieder vollständig verworfen. Zurück ist
+exakt die ursprüngliche Leitungsführung der Netzwerkplan-Software: eine
+weiche Bezier-Kurve, die an einem konkreten Port/Pin immer senkrecht zur
+jeweiligen Anschlussseite austritt ("Anti-Verknoten"-Verhalten), bevor sie
+sich zur nächsten Station (Wegpunkt oder Zielelement) biegt.
+
+- `buildSmoothPath()` in `static/app.js` sowie `build_smooth_path_segments()`
+  in `app.py` (PDF-Export) sind wieder exakt die Original-Implementierung
+  – numerisch auf mehrere Nachkommastellen identisch zur Version vor den
+  3.2.0-Änderungen zurückgeprüft.
+- Die in 3.2.0 eingeführten Funktionen für die rechtwinklige Führung
+  (`buildRoutedPoints`, `routedPointsToPath`, `build_routed_points`,
+  `build_connector_path_segments` und die zugehörigen Stub-/Eckenradius-
+  Konstanten) wurden vollständig entfernt.
+- **Der in 3.2.0 behobene Andock-Bugfix bleibt erhalten**, da er von der
+  Leitungsführung unabhängig ist: `measureElementSizes()` misst weiterhin
+  nach jedem Rendern die tatsächliche Elementgröße (statt einer festen
+  76px-Höhenannahme) und sorgt so dafür, dass Leitungen ohne konkreten
+  Anschlusspunkt sowie individuell platzierte Pins (Platine/Raspberry Pi)
+  korrekt am Element andocken.
+- Die PDF-Bounding-Box-Berechnung berücksichtigt weiterhin die tatsächlich
+  gezeichnete Kurve (jetzt: die Bezier-Kontrollpunkte, eine kubische
+  Bezier-Kurve liegt immer innerhalb der konvexen Hülle ihrer vier
+  Kontrollpunkte), damit ausladende Kurven nicht am Seitenrand
+  abgeschnitten werden.
+- Die kosmetische Verbesserung der Leitungs-/Kabel-Label-Position
+  (Versatz senkrecht zur lokalen Segmentrichtung statt eines festen
+  "-8 in Y") bleibt ebenfalls erhalten, da sie unabhängig von der
+  gewählten Leitungsführung korrekt funktioniert.
+- README/CHANGELOG-Formulierungen entsprechend zurückgesetzt
+  ("harness.design"-Stil statt "Netzwerkplaner"-Stil).
+- Getestet: numerischer Abgleich der wiederhergestellten Bezier-Kurve
+  gegen den ursprünglichen (Vor-3.2.0-)Stand (identische Kontrollpunkte),
+  vollständiger jsdom-Renderdurchlauf der Beispiel-`config.json`
+  (fehlerfrei), sowie visuelle PDF-Kontrolle in beiden Hintergrund-
+  Varianten.
+
 ## [3.2.0] – Neue Leitungsführung im "Netzwerkplaner"-Stil + Andock-Bugfix bei variabler Elementhöhe
 
 **Zwei vom Nutzer gemeldete Probleme behoben:** Leitungen dockten nicht
