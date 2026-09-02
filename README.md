@@ -2,7 +2,7 @@
 
 ![Bild](Unbenannt.PNG)
 
-**Aktuelle Version: 3.2.1** – siehe [CHANGELOG.md](CHANGELOG.md) für alle
+**Aktuelle Version: 3.3.0** – siehe [CHANGELOG.md](CHANGELOG.md) für alle
 Änderungen.
 
 Ein lokal laufender Webserver, der einen interaktiven Verkabelungsplan
@@ -197,7 +197,10 @@ solange gültiges JSON erhalten bleibt.
   (Farbe/Stärke/Bezeichnung/Kabel-Zugehörigkeit im Klick auf die Linie
   einstellbar). Anschlüsse heißen bei den meisten Elementen **Pins**; nur
   bei echten Netzwerkgeräten (Router, Ethernet Switch) bleibt es bei
-  **Ports**.
+  **Ports**. Die Elementgröße wächst automatisch mit der Anzahl der
+  Anschlüsse (z. B. wird eine Klemmleiste mit 24 Ports spürbar breiter),
+  damit sie nie gequetscht wirken – bei Ports oben/unten wächst die
+  Breite, bei Ports links/rechts die Höhe.
   Bei Elementen mit gemeinsamem Anschluss-Riegel (Steuergerät,
   Klemmleiste, Router, Ethernet Switch, Relay, Motor, Stromversorgung,
   Batterie, Schalter/Taster/Poti) lassen sich die Anschlüsse über die

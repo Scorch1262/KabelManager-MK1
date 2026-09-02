@@ -273,6 +273,10 @@ body.use-mode .divider.edit-divider {
 .el-body { order: 0; }
 
 .el-body {
+  /* Basiswert (Mindestgroesse). Wird bei Elementen mit vielen Ports/Pins
+     per Inline-Style von computeElementBoxSize() in app.js ueberschrieben,
+     damit die Box mit der Anzahl der Anschluesse mitwaechst und diese
+     nicht gequetscht werden. */
   width: 148px;
   min-width: 148px;
   flex-shrink: 0;

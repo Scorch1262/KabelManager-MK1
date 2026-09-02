@@ -167,6 +167,14 @@ def api_save_config():
 ELEMENT_W = 148
 ELEMENT_H = 76
 
+# Platzbedarf je Anschluss (siehe PORT_SPACING/PORT_BAR_PADDING in
+# static/app.js) - MUSS mit dem JS-Wert uebereinstimmen, damit die
+# PDF-Elementgroesse exakt der Webansicht entspricht.
+PORT_DOT = 14
+PORT_GAP = 5
+PORT_SPACING = PORT_DOT + PORT_GAP
+PORT_BAR_PADDING = 2 * 7 + 10
+
 # Menschenlesbare Bezeichnungen je Elementtyp fuer PDF/Netzliste. Enthaelt
 # sowohl die aktuellen (v3.1.0) als auch die frueheren (Netzwerkplan-)
 # Typen, damit auch alte config.json-Dateien sinnvoll beschriftet werden.
@@ -291,10 +299,43 @@ def port_label(el, port_index):
     return label
 
 
+def get_element_size(el):
+    """Python-Nachbildung von computeElementBoxSize() in static/app.js:
+    ermittelt die tatsaechlich benoetigte Elementgroesse (Breite/Hoehe)
+    anhand der Anzahl der Ports/Pins, damit PDF-Export und Webansicht auch
+    bei vielen Anschluessen exakt dieselbe (gewachsene) Elementgroesse
+    zeigen, statt sie auf die feste Standardgroesse zu quetschen."""
+    width, height = ELEMENT_W, ELEMENT_H
+    n = get_port_count(el)
+    if n <= 0:
+        return width, height
+
+    el_type = el.get("type")
+    if el_type in INDIVIDUAL_PIN_TYPES:
+        counts = {"top": 0, "bottom": 0, "left": 0, "right": 0}
+        for i in range(n):
+            counts[get_pin_side_individual(el, i)] += 1
+        needed_w = max(counts["top"], counts["bottom"]) * PORT_SPACING + PORT_BAR_PADDING
+        needed_h = max(counts["left"], counts["right"]) * PORT_SPACING + PORT_BAR_PADDING
+        width = max(width, needed_w)
+        height = max(height, needed_h)
+    else:
+        side = el.get("port_side")
+        if side not in PORT_SIDES:
+            side = "bottom"
+        needed_span = n * PORT_SPACING + PORT_BAR_PADDING
+        if side in ("top", "bottom"):
+            width = max(width, needed_span)
+        else:
+            height = max(height, needed_span)
+    return width, height
+
+
 def element_center(el):
     x = el.get("x", 0) or 0
     y = el.get("y", 0) or 0
-    return x + ELEMENT_W / 2.0, y + ELEMENT_H / 2.0
+    w, h = get_element_size(el)
+    return x + w / 2.0, y + h / 2.0
 
 
 def get_pin_side_individual(el, index):
@@ -340,12 +381,13 @@ def port_point(el, port_index, side_key):
         frac = (idx + 0.5) / n
 
     margin = 12.0
+    w, h = get_element_size(el)
     if side in ("bottom", "top"):
-        px = x + margin + frac * max(ELEMENT_W - 2 * margin, 1)
-        py = y + ELEMENT_H if side == "bottom" else y
+        px = x + margin + frac * max(w - 2 * margin, 1)
+        py = y + h if side == "bottom" else y
     else:
-        py = y + margin + frac * max(ELEMENT_H - 2 * margin, 1)
-        px = x + ELEMENT_W if side == "right" else x
+        py = y + margin + frac * max(h - 2 * margin, 1)
+        px = x + w if side == "right" else x
     return px, py
 
 
@@ -582,8 +624,9 @@ def build_pdf(cfg, theme_name):
     for el in elements:
         x = el.get("x", 0) or 0
         y = el.get("y", 0) or 0
-        xs += [x, x + ELEMENT_W]
-        ys += [y, y + ELEMENT_H]
+        w, h = get_element_size(el)
+        xs += [x, x + w]
+        ys += [y, y + h]
     for conn in connections:
         for wp in conn.get("waypoints") or []:
             if isinstance(wp, dict) and "x" in wp and "y" in wp:
@@ -749,7 +792,8 @@ def build_pdf(cfg, theme_name):
     # --- Elemente zeichnen ---
     for el in elements:
         x0, y0 = el.get("x", 0) or 0, el.get("y", 0) or 0
-        x1, y1 = x0 + ELEMENT_W, y0 + ELEMENT_H
+        el_w, el_h = get_element_size(el)
+        x1, y1 = x0 + el_w, y0 + el_h
         # Canvas-Koordinaten wachsen nach unten (y0 = oben, y1 = unten);
         # to_page() spiegelt nach PDF-Koordinaten (y waechst nach oben).
         ptl_x, ptl_y = to_page(x0, y0)  # obere linke Ecke der Box

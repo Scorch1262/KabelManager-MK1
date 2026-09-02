@@ -2,6 +2,40 @@
 
 Alle nennenswerten Änderungen an diesem Projekt werden hier dokumentiert.
 
+## [3.3.0] – Elementgröße wächst automatisch mit der Anzahl der Anschlüsse
+
+Bisher war die Breite eines Elements unabhängig von der Portzahl fest auf
+148px codiert (nur die Höhe passte sich bereits automatisch an den
+Inhalt an). Bei Elementen mit vielen Anschlüssen (z. B. einer Klemmleiste
+mit 24 Ports) wirkten die Anschluss-Punkte dadurch gequetscht.
+
+- Neue Funktion `computeElementBoxSize()` in `static/app.js`: berechnet
+  die benötigte Mindestgröße anhand der Anzahl und Ausrichtung der
+  Ports/Pins und wendet sie als Inline-Style auf das Element an – die
+  Standardgröße (148×76) bleibt dabei immer die Untergrenze, nie kleiner.
+  - Ports oben/unten → die **Breite** wächst mit der Portzahl.
+  - Ports links/rechts → die **Höhe** wächst mit der Portzahl.
+  - Platine/Raspberry Pi (individuelle Pin-Platzierung je Seite) → Breite
+    und Höhe wachsen unabhängig voneinander, je nachdem wie viele Pins auf
+    der jeweils volleren Seite (oben/unten bzw. links/rechts) liegen.
+- **PDF-Export zieht exakt mit:** `get_element_size()` in `app.py` ist die
+  mathematisch exakte Python-Nachbildung derselben Formel (numerisch auf
+  9 Testfällen 1:1 abgeglichen, inkl. Extremfall mit individuell
+  platzierten Pins), sodass Elementgröße und Portabstände in PDF und
+  Webansicht weiterhin exakt übereinstimmen. Element-Zeichenbox,
+  Bounding-Box-Berechnung fürs Zuschneiden und alle Andockpunkt-
+  Berechnungen (`port_point()`, `element_center()`) nutzen jetzt
+  durchgängig die tatsächliche, portabhängige Größe statt der festen
+  Konstante.
+- Getestet: 4 strukturelle jsdom-Tests (u. a. Klemmleiste mit 24 Ports
+  wird spürbar breiter, ein Element mit wenigen Ports bleibt unverändert
+  bei der Standardgröße), numerischer JS/Python-Abgleich für 9 + 1
+  Testfälle (uniforme Portleiste horizontal/vertikal, individuelle
+  Pin-Platzierung, keine Ports), sowie visuelle PDF-Kontrolle: eine
+  24-Port-Klemmleiste, ein 16-Port-Switch mit seitlicher Portleiste und
+  eine Platine mit 14 individuell verteilten Pins wachsen jeweils
+  sichtbar passend mit.
+
 ## [3.2.1] – Leitungsführung zurück auf die ursprüngliche, bewährte Bezier-Kurve
 
 Die in 3.2.0 eingeführte rechtwinklige ("orthogonale") Leitungsführung

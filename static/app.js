@@ -153,6 +153,46 @@ function getPortCount(el) {
   const n = parseInt(el.ports, 10);
   return Number.isFinite(n) && n > 0 ? n : DEFAULT_PORTS[el.type];
 }
+
+/* Platzbedarf je Anschluss entlang einer Portleiste (Punktbreite + Abstand,
+   siehe .port-dot/.ports-bar in style.css) sowie ein kleiner Sicherheits-
+   zuschlag fuer Leisten-Innenabstand (.ports-bar hat 7px Padding je Seite). */
+const PORT_SPACING = PORT_DOT + PORT_GAP;
+const PORT_BAR_PADDING = 2 * 7 + 10;
+
+/* Ermittelt die benoetigte Elementgroesse (Breite/Mindesthoehe), damit alle
+   Anschluesse ohne Quetschen nebeneinander Platz finden – die Groesse
+   waechst also mit der Anzahl der Ports/Pins, statt wie zuvor bei fester
+   148px-Breite unabhaengig von der Portzahl zu bleiben. Wird als Inline-
+   Style auf .el-body angewendet (siehe buildElementNode) und wirkt sich
+   dadurch automatisch auch auf die zugehoerige(n) Portleiste(n) aus (die
+   sich per CSS-Stretch an .el-body ausrichten). Ergebnis ist nie kleiner
+   als die Standardgroesse (148x76). */
+function computeElementBoxSize(el) {
+  let width = DEFAULT_ELEMENT_W;
+  let minHeight = DEFAULT_ELEMENT_H;
+  const portCount = getPortCount(el);
+  if (portCount === 0) return { width, minHeight };
+
+  if (hasIndividualPinPlacement(el.type)) {
+    const bySide = { top: 0, bottom: 0, left: 0, right: 0 };
+    for (let i = 0; i < portCount; i++) bySide[getPinSide(el, i)]++;
+    const neededW = Math.max(bySide.top, bySide.bottom) * PORT_SPACING + PORT_BAR_PADDING;
+    const neededH = Math.max(bySide.left, bySide.right) * PORT_SPACING + PORT_BAR_PADDING;
+    width = Math.max(width, neededW);
+    minHeight = Math.max(minHeight, neededH);
+  } else {
+    const side = getPortSide(el);
+    const neededSpan = portCount * PORT_SPACING + PORT_BAR_PADDING;
+    if (side === "top" || side === "bottom") {
+      width = Math.max(width, neededSpan);
+    } else {
+      minHeight = Math.max(minHeight, neededSpan);
+    }
+  }
+  return { width, minHeight };
+}
+
 function getPortSide(el) {
   return PORT_SIDES.includes(el.port_side) ? el.port_side : "bottom";
 }
@@ -862,6 +902,11 @@ function buildElementNode(el) {
 
   const body = document.createElement("div");
   body.className = "el-body";
+  const boxSize = computeElementBoxSize(el);
+  body.style.width = boxSize.width + "px";
+  if (boxSize.minHeight > DEFAULT_ELEMENT_H) {
+    body.style.minHeight = boxSize.minHeight + "px";
+  }
   body.innerHTML = `
     <div class="el-head">
       <div class="el-icon" style="color:${def.color}">${getElementIconMarkup(el, def)}</div>
